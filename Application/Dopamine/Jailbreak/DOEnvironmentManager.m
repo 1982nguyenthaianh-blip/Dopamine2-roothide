@@ -96,6 +96,7 @@ int reboot3(uint64_t flags, ...);
     return [@"/private/preboot" stringByAppendingPathComponent:[self bootManifestHash].hexString];
 }
 
+/*
 - (void)locateJailbreakRoot
 {
     if (!gSystemInfo.jailbreakInfo.rootPath) {
@@ -191,6 +192,7 @@ int reboot3(uint64_t flags, ...);
     
     return error;
 }
+*/
 
 - (BOOL)isArm64e
 {
@@ -223,6 +225,12 @@ int reboot3(uint64_t flags, ...);
 
 - (BOOL)isJailbroken
 {
+/************** roothide specific ***********/
+    if(!jbclient_roothide_jailbroken())
+        return NO;
+/************** roothide specific ********/
+
+    
     static BOOL jailbroken = NO;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -495,6 +503,7 @@ int reboot3(uint64_t flags, ...);
     }
 }
 
+/*
 - (BOOL)isFakelibMounted
 {
     struct statfs fsb;
@@ -563,6 +572,7 @@ int reboot3(uint64_t flags, ...);
         actionBlock();
     }
 }
+*/
 
 - (NSString *)accessibleKernelPath
 {

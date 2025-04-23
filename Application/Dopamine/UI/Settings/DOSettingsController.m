@@ -290,6 +290,7 @@
                     [specifiers addObject:reinstallPackageManagersSpecifier];
                 }
                 if ((envManager.isJailbroken || envManager.isInstalledThroughTrollStore) && envManager.isBootstrapped) {
+/*
                     PSSpecifier *hideUnhideJailbreakSpecifier = [PSSpecifier emptyGroupSpecifier];
                     hideUnhideJailbreakSpecifier.target = self;
                     [hideUnhideJailbreakSpecifier setProperty:@"DOButtonCell" forKey:@"headerCellClass"];
@@ -307,12 +308,14 @@
                         [specifiers addObject:hideUnhideJailbreakSpecifier];
                     }
                     
+*/
                     PSSpecifier *removeJailbreakSpecifier = [PSSpecifier emptyGroupSpecifier];
                     removeJailbreakSpecifier.target = self;
                     [removeJailbreakSpecifier setProperty:@"Button_Remove_Jailbreak" forKey:@"title"];
                     [removeJailbreakSpecifier setProperty:@"DOButtonCell" forKey:@"headerCellClass"];
                     [removeJailbreakSpecifier setProperty:@"trash" forKey:@"image"];
                     [removeJailbreakSpecifier setProperty:@"removeJailbreakPressed" forKey:@"action"];
+/*
                     if (hideJailbreakButtonShown) {
                         if (envManager.isJailbroken) {
                             [removeJailbreakSpecifier setProperty:DOLocalizedString(@"Hint_Hide_Jailbreak_Jailbroken") forKey:@"footerText"];
@@ -321,6 +324,7 @@
                             [removeJailbreakSpecifier setProperty:DOLocalizedString(@"Hint_Hide_Jailbreak") forKey:@"footerText"];
                         }
                     }
+*/
                     [specifiers addObject:removeJailbreakSpecifier];
                 }
             }
@@ -505,12 +509,14 @@
     [self presentViewController:changeMobilePasswordAlert animated:YES completion:nil];
 }
 
+/*
 - (void)hideUnhideJailbreakPressed
 {
     DOEnvironmentManager *envManager = [DOEnvironmentManager sharedManager];
     [envManager setJailbreakHidden:!envManager.isJailbreakHidden];
     [self reloadSpecifiers];
 }
+*/
 
 - (void)removeJailbreakPressed
 {

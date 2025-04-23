@@ -19,12 +19,21 @@
 
 bool gInEarlyBoot = true;
 
-void abort_with_reason(uint32_t reason_namespace, uint64_t reason_code, const char *reason_string, uint64_t reason_flags);
+//void abort_with_reason(uint32_t reason_namespace, uint64_t reason_code, const char *reason_string, uint64_t reason_flags);
+#define abort_with_reason(reason_namespace,reason_code,reason_string,reason_flags)  launchd_panic("%s",reason_string)
+void roothide_launchd_preinit();
+void roothide_launchd_postinit(bool firstLoad);
+
 extern void systemwide_domain_set_enabled(bool enabled);
 
 __attribute__((constructor)) static void initializer(void)
 {
 	crashreporter_start();
+
+/********** roothide specfic ********/
+	roothide_launchd_preinit();
+/********** roothide specfic ********/
+
 
 	// If we performed a jbupdate before the userspace reboot, these vars will be set
 	// In that case, we want to run finalizers
@@ -79,6 +88,7 @@ __attribute__((constructor)) static void initializer(void)
 	initIPCHooks();
 	initJetsamHook();
 
+/*
 	if (getenv("DOPAMINE_IS_HIDDEN") != 0) {
 		// If the jailbreak is currently hidden, fakelib had to be mounted again before the userspace reboot
 		// Now that the userspace reboot is over, we can unmount it again
@@ -95,6 +105,7 @@ __attribute__((constructor)) static void initializer(void)
 		// No need to keep this around
 		unsetenv("DOPAMINE_IS_HIDDEN");
 	}
+*/
 
 	// This will ensure launchdhook is always reinjected after userspace reboots
 	// As this launchd will pass environ to the next launchd...
@@ -106,4 +117,8 @@ __attribute__((constructor)) static void initializer(void)
 	// Set an identifier that uniquely identifies this userspace boot
 	// Part of rootless v2 spec
 	setenv("LAUNCHD_UUID", [NSUUID UUID].UUIDString.UTF8String, 1);
+
+/********** roothide specfic ********/
+roothide_launchd_postinit(firstLoad);
+/********** roothide specfic ********/
 }

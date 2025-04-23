@@ -21,9 +21,15 @@
 
 int HOOK(__fcntl)(int fd, int cmd, void *arg1, void *arg2, void *arg3, void *arg4, void *arg5, void *arg6, void *arg7, void *arg8)
 {
+	// int ret = (int)msyscall_errno(0x5C, fd, cmd, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+	// if(ret == 0) return ret;
+
 	switch (cmd) {
 		case F_ADDSIGS:
+			break;
+			
 		case F_ADDFILESIGS:
+		case F_ADDFILESIGS_INFO:
 		case F_ADDFILESIGS_RETURN: {
 			struct siginfo siginfo;
 			siginfo.source = (cmd == F_ADDSIGS) ? SIGNATURE_SOURCE_PROC : SIGNATURE_SOURCE_FILE;
