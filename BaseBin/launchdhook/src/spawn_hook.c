@@ -13,6 +13,7 @@ extern char **environ;
 
 //void abort_with_reason(uint32_t reason_namespace, uint64_t reason_code, const char *reason_string, uint64_t reason_flags);
 #define abort_with_reason(reason_namespace,reason_code,reason_string,reason_flags)  launchd_panic("%s",reason_string)
+extern int roothide_launchd_trust_executable(const char* path);
 extern int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *restrict path, struct _posix_spawn_args_desc *desc, char *const argv[restrict], char *const envp[restrict]);
 extern int roothide_launchd___posix_spawn_posthook(pid_t *restrict pidp, const char *restrict path, struct _posix_spawn_args_desc *desc, char *const argv[restrict], char *const envp[restrict]);
 
@@ -67,13 +68,12 @@ if (envp) for (int i = 0; envp[i]; i++) JBLogDebug("\tenvp[%d] = %s", i, envp[i]
 pid_t pidval = 0;
 if (!pid) pid = &pidval;
 
-
 	// we need to disable the crash reporter during the orig call
 	// otherwise the child process inherits the exception ports
 	// and this would trip jailbreak detections
-	crashreporter_pause();	
+	int key = crashreporter_pause();	
 	int r = __posix_spawn_orig(pid, path, desc, argv, envp);
-	crashreporter_resume();
+	crashreporter_resume(key);
 
 JBLogDebug("__posix_spawn ret=%d pid=%d", r, *pid);
 
@@ -184,7 +184,7 @@ int __posix_spawn_hook(pid_t *restrict pid, const char *restrict path,
 		}
 	}
 
-	return posix_spawn_hook_shared(pid, path, desc, argv, envp, roothide_launchd___posix_spawn_posthook, systemwide_trust_file_by_path, platform_set_process_debugged, jbsetting(jetsamMultiplier));
+	return posix_spawn_hook_shared(pid, path, desc, argv, envp, roothide_launchd___posix_spawn_posthook, roothide_launchd_trust_executable, platform_set_process_debugged, jbsetting(jetsamMultiplier));
 }
 
 void initSpawnHooks(void)

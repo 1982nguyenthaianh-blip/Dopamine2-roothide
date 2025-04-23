@@ -3,42 +3,12 @@
 #import <fcntl.h>
 #include "common.h"
 
-bool stringStartsWith(const char *str, const char* prefix)
-{
-	if (!str || !prefix) {
-		return false;
-	}
-
-	size_t str_len = strlen(str);
-	size_t prefix_len = strlen(prefix);
-
-	if (str_len < prefix_len) {
-		return false;
-	}
-
-	return !strncmp(str, prefix, prefix_len);
-}
-
-bool is_sub_path(const char* parent, const char* child)
-{
-	char real_child[PATH_MAX]={0};
-	char real_parent[PATH_MAX]={0};
-
-	if(!realpath(child, real_child)) return false;
-	if(!realpath(parent, real_parent)) return false;
-
-	if(!stringStartsWith(real_child, real_parent))
-		return false;
-
-	return real_child[strlen(real_parent)] == '/';
-}
-
 %hookf(int, fcntl, int fildes, int cmd, ...) {
 	if (cmd == F_SETPROTECTIONCLASS) {
 		char filePath[PATH_MAX];
 		if (fcntl(fildes, F_GETPATH, filePath) != -1) {
 			// Skip setting protection class on jailbreak apps, this doesn't work and causes snapshots to not be saved correctly
-			if (is_sub_path(jbroot("/var/mobile/Library/SplashBoard/Snapshots/"), filePath)) {
+			if (isSubPathOf(filePath, jbroot("/var/mobile/Library/SplashBoard/Snapshots/"))) {
 				return 0;
 			}
 		}
@@ -78,7 +48,7 @@ bool is_sub_path(const char* parent, const char* child)
 -(NSString *)snapshotContainerPath {
     NSString* path = %orig;
 
-    if([path hasPrefix:@"/var/mobile/Library/SplashBoard/Snapshots/"] && ![self.bundleIdentifier hasPrefix:@"com.apple."]) {
+    if([path hasPrefix:@"/var/mobile/Library/SplashBoard/Snapshots/"] && (![self.bundleIdentifier hasPrefix:@"com.apple."] || is_apple_internal_identifier(self.bundleIdentifier.UTF8String))) {
         NSLog(@"snapshotContainerPath redirect %@ : %@", self.bundleIdentifier, path);
         path = jbroot(path);
     }
@@ -101,12 +71,12 @@ static const void *kDenyQueryTagKey = &kDenyQueryTagKey;
 
 	if(tag && tag.boolValue) {
 
-		if([SENSITIVE_APP_LIST containsObject:bundleIdentifier]) {
+		if(is_sensitive_app_identifier(bundleIdentifier.UTF8String)) {
 			NSLog(@"FBSApplicationLibrary deny query %@", bundleIdentifier);
 			return nil;
 		}
 
-		if(result && executableURL && isJailbreakPath(executableURL.path.fileSystemRepresentation)) {
+		if(result && executableURL && isJailbreakBundlePath(executableURL.path.fileSystemRepresentation)) {
 			NSLog(@"FBSApplicationLibrary deny query %@", bundleIdentifier);
 			return nil;
 		}
@@ -119,13 +89,13 @@ static const void *kDenyQueryTagKey = &kDenyQueryTagKey;
 %hook FBSystemService
 -(void*)openApplication:(NSString*)bundleIdentifier withOptions:(id)options originator:(id)originator requestID:(void*)requestID completion:(void*)completion
 {
-	NSLog(@"openApplication %@ withOptions:%p originator:%p requestID:%p completion:%p", bundleIdentifier, options, originator, requestID, completion);
+	NSLog(@"openApplication %@ withOptions:%@ originator:%@ requestID:%@ completion:%p", bundleIdentifier, options, originator, requestID, completion);
 
 	id currentContext = [NSClassFromString(@"BSServiceConnection") performSelector:@selector(currentContext)];
 	id remoteProcess = [currentContext performSelector:@selector(remoteProcess)]; //BSProcessHandle
 
 	NSNumber* _pid = [remoteProcess valueForKey:@"_pid"];
-	NSString* _bundleID = [remoteProcess valueForKey:@"_bundleID"];
+	NSString* _bundleID = [remoteProcess valueForKey:@"_bundleID"]; //may be nil
 
 	pid_t pid = _pid.intValue;
 

@@ -892,17 +892,17 @@ Suites: iphoneos-arm64e/%d\n\
 Components: main\n\
 "
 
-#define ALT_SOURCES "\
-Types: deb\n\
-URIs: https://iosjb.top/\n\
-Suites: ./\n\
-Components:\n\
-\n\
-Types: deb\n\
-URIs: https://iosjb.top/procursus\n\
-Suites: iphoneos-arm64e/%d\n\
-Components: main\n\
-"
+// #define ALT_SOURCES "\
+// Types: deb\n\
+// URIs: https://iosjb.top/\n\
+// Suites: ./\n\
+// Components:\n\
+// \n\
+// Types: deb\n\
+// URIs: https://iosjb.top/procursus\n\
+// Suites: iphoneos-arm64e/%d\n\
+// Components: main\n\
+// "
 
 #define ZEBRA_SOURCES "\
 # Zebra Sources List\n\
@@ -930,10 +930,10 @@ int getCFMajorVersion(void)
     
     ASSERT([[NSString stringWithFormat:@(DEFAULT_SOURCES), getCFMajorVersion()] writeToFile:jbrootPrefix(@"/etc/apt/sources.list.d/default.sources") atomically:YES encoding:NSUTF8StringEncoding error:nil]);
     
-    //Users in some regions seem to be unable to access github.io
-    if([NSLocale.currentLocale.countryCode isEqualToString:@"CN"]) {
-        ASSERT([[NSString stringWithFormat:@(ALT_SOURCES), getCFMajorVersion()] writeToFile:jbrootPrefix(@"/etc/apt/sources.list.d/sileo.sources") atomically:YES encoding:NSUTF8StringEncoding error:nil]);
-    }
+    // //Users in some regions seem to be unable to access github.io
+    // if([NSLocale.currentLocale.countryCode isEqualToString:@"CN"]) {
+    //     ASSERT([[NSString stringWithFormat:@(ALT_SOURCES), getCFMajorVersion()] writeToFile:jbrootPrefix(@"/etc/apt/sources.list.d/sileo.sources") atomically:YES encoding:NSUTF8StringEncoding error:nil]);
+    // }
     
     if(![fm fileExistsAtPath:jbrootPrefix(@"/var/mobile/Library/Application Support/xyz.willy.Zebra")])
     {
@@ -1065,7 +1065,7 @@ int getCFMajorVersion(void)
         
         if([fm fileExistsAtPath:[jbroot_path stringByAppendingPathComponent:@"/.bootstrapped"]]
            || [fm fileExistsAtPath:[jbroot_path stringByAppendingPathComponent:@"/.thebootstrapped"]]) {
-            completion([NSError errorWithDomain:bootstrapErrorDomain code:BootstrapErrorCodeFailedExtracting userInfo:@{NSLocalizedDescriptionKey : @"\n\nYour device has been bootstrapped through the Bootstrap app, please disable tweak for apps in AppList and UnBootstrap before jailbreaking.\n\n\n"}]);
+            completion([NSError errorWithDomain:bootstrapErrorDomain code:BootstrapErrorCodeFailedExtracting userInfo:@{NSLocalizedDescriptionKey : @"\n\n\n\nYour device has been bootstrapped through the roothide Bootstrap app, please uninject for all apps in the AppList of Bootstrap and unisntall it in the Settings of Bootstrap before jailbreaking with Dopamine.\n\n\n"}]);
             return -1;
         }
 
@@ -1107,12 +1107,6 @@ int getCFMajorVersion(void)
         STRAPLOG("device is strapped: %@", jbroot_path);
         
         ASSERT([fm fileExistsAtPath:jbrootPrefix(@"/.installed_dopamine")]);
-        
-        NSString* dopamineVersion = [NSString stringWithContentsOfFile:jbrootPrefix(@"/.installed_dopamine") encoding:NSUTF8StringEncoding error:nil];
-        if(dopamineVersion.intValue != DOPAMINE_INSTALL_VERSION) {
-            completion([NSError errorWithDomain:bootstrapErrorDomain code:BootstrapErrorCodeFailedExtracting userInfo:@{NSLocalizedDescriptionKey : @"\n\nYour device has been jailbroken through the roothide Dopamine 1.x\n\n\n"}]);
-            return -1;
-        }
         
         STRAPLOG("Status: Rerandomize jbroot");
         
@@ -1276,6 +1270,11 @@ int getCFMajorVersion(void)
         NSString *roothideManager = [[NSBundle mainBundle].bundlePath stringByAppendingPathComponent:@"roothideapp.deb"];
          r = [self installPackage:roothideManager];
         if (r != 0) return [NSError errorWithDomain:bootstrapErrorDomain code:BootstrapErrorCodeFailedFinalising userInfo:@{NSLocalizedDescriptionKey : [NSString stringWithFormat:@"Failed to install roothideManager: %d\n", r]}];
+
+        //Remove the shits triggered by uicache before first jailbreak is fully activated.
+        [NSFileManager.defaultManager removeItemAtPath:@"/var/mobile/Library/SplashBoard/Snapshots/xyz.willy.Zebra" error:nil];
+        [NSFileManager.defaultManager removeItemAtPath:@"/var/mobile/Library/SplashBoard/Snapshots/com.roothide.manager" error:nil];
+        [NSFileManager.defaultManager removeItemAtPath:@"/var/mobile/Library/SplashBoard/Snapshots/org.coolstar.SileoStore" error:nil];
     }
     else
     {
@@ -1302,16 +1301,16 @@ int getCFMajorVersion(void)
         
         if (shouldInstallBasebinLink) {
             // Clean symlinks from earlier Dopamine versions
-            if (![self fileOrSymlinkExistsAtPath:jbrootPrefix(@"/usr/bin/opainject")]) {
+            if ([self fileOrSymlinkExistsAtPath:jbrootPrefix(@"/usr/bin/opainject")]) {
                 [[NSFileManager defaultManager] removeItemAtPath:jbrootPrefix(@"/usr/bin/opainject") error:nil];
             }
-            if (![self fileOrSymlinkExistsAtPath:jbrootPrefix(@"/usr/bin/jbctl")]) {
+            if ([self fileOrSymlinkExistsAtPath:jbrootPrefix(@"/usr/bin/jbctl")]) {
                 [[NSFileManager defaultManager] removeItemAtPath:jbrootPrefix(@"/usr/bin/jbctl") error:nil];
             }
-            if (![self fileOrSymlinkExistsAtPath:jbrootPrefix(@"/usr/lib/libjailbreak.dylib")]) {
+            if ([self fileOrSymlinkExistsAtPath:jbrootPrefix(@"/usr/lib/libjailbreak.dylib")]) {
                 [[NSFileManager defaultManager] removeItemAtPath:jbrootPrefix(@"/usr/lib/libjailbreak.dylib") error:nil];
             }
-            if (![self fileOrSymlinkExistsAtPath:jbrootPrefix(@"/usr/bin/libjailbreak.dylib")]) {
+            if ([self fileOrSymlinkExistsAtPath:jbrootPrefix(@"/usr/bin/libjailbreak.dylib")]) {
                 // Yes this exists >.< was a typo
                 [[NSFileManager defaultManager] removeItemAtPath:jbrootPrefix(@"/usr/bin/libjailbreak.dylib") error:nil];
             }
@@ -1335,6 +1334,9 @@ int getCFMajorVersion(void)
     NSError* error=nil;
     [[NSFileManager defaultManager] copyItemAtPath:[unpackedPath stringByAppendingPathComponent:@"/var/jb/usr/lib/libroot.dylib"] toPath:jbrootPrefix(@"/usr/lib/libroot.dylib") error:&error];
     if(error) {
+        return error;
+    }
+    if(![[NSFileManager defaultManager] removeItemAtPath:unpackedPath error:&error]) {
         return error;
     }
 

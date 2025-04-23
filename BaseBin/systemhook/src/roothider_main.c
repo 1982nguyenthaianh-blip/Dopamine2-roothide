@@ -3,7 +3,6 @@
 #include <dlfcn.h>
 #include <unistd.h>
 #include <libgen.h>
-#include <libproc.h>
 #include <sys/sysctl.h>
 #include <sys/proc_info.h>
 
@@ -11,63 +10,16 @@
 
 #include "common.h"
 #include "envbuf.h"
+#include "sandbox.h"
 #include "roothider.h"
 
 const char* HOOK_DYLIB_PATH = NULL;
 
-bool dyld_patch_global_enabled = true;
 bool dyld_patch_fallback_enabled = false;
 
 //export for PatchLoader
 __attribute__((visibility("default"))) int PLRequiredJIT() {
 	return 0;
-}
-
-#define APP_PATH_PREFIX "/private/var/containers/Bundle/Application/"
-bool is_app_path(const char* path)
-{
-    if(!path) return false;
-
-    char rp[PATH_MAX];
-    if(!realpath(path, rp)) return false;
-
-    if(strncmp(rp, APP_PATH_PREFIX, sizeof(APP_PATH_PREFIX)-1) != 0)
-        return false;
-
-    char* p1 = rp + sizeof(APP_PATH_PREFIX)-1;
-    char* p2 = strchr(p1, '/');
-    if(!p2) return false;
-
-    //is normal app or jailbroken app/daemon?
-    if((p2 - p1) != (sizeof("xxxxxxxx-xxxx-xxxx-yxxx-xxxxxxxxxxxx")-1))
-        return false;
-
-	return true;
-}
-
-pid_t __getppid()
-{
-	int32_t opt[4] = {
-		CTL_KERN,
-		KERN_PROC,
-		KERN_PROC_PID,
-		getpid(),
-	};
-	struct kinfo_proc info={0};
-	size_t len = sizeof(struct kinfo_proc);
-	if(sysctl(opt, 4, &info, &len, NULL, 0) == 0) {
-		if((info.kp_proc.p_flag & P_TRACED) != 0) {
-			return info.kp_proc.p_oppid;
-		}
-	}
-
-    struct proc_bsdinfo procInfo;
-	//some process may be killed by sandbox if call systme getppid() so try this first
-	if (proc_pidinfo(getpid(), PROC_PIDTBSDINFO, 0, &procInfo, sizeof(procInfo)) == sizeof(procInfo)) {
-		return procInfo.pbi_ppid;
-	}
-
-	return getppid();
 }
 
 static uid_t _CFGetSVUID(bool *successful) {
@@ -227,7 +179,9 @@ void trust_insert_libraries(char** envc)
 	if(!DYLD_INSERT_LIBRARIES) return;
 
 	string_enumerate_components(DYLD_INSERT_LIBRARIES, ":", ^(const char *path, bool *stop) {
-		jbclient_trust_library_recurse(path, NULL);
+		if (strcmp(path, HOOK_DYLIB_PATH) != 0) {
+			jbclient_trust_library_recurse(path, NULL);
+		}
 	});
 }
 
@@ -254,7 +208,7 @@ int roothide_systemhook___posix_spawn_prehook(pid_t *restrict pidp, const char *
 		return ret;
 	}
 
-	if(!dyld_patch_global_enabled)
+	if(!jbclient_dyld_patch_enabled())
 	{
 		trust_binary = __no_need_to_trust_now__;
 	}
@@ -267,7 +221,7 @@ int roothide_systemhook___posix_spawn_posthook(pid_t *restrict pidp, const char 
 	posix_spawnattr_t attrp = &desc->attrp;
 
 	kSpawnConfig spawnConfig = 0;
-	if(!dyld_patch_global_enabled)
+	if(!jbclient_dyld_patch_enabled())
 	{
 		spawnConfig = spawn_config_for_executable(path, argv);
 
@@ -331,9 +285,11 @@ int roothide_systemhook___posix_spawn_posthook(pid_t *restrict pidp, const char 
 	// on some devices dyldhook may fail due to vm_protect(VM_PROT_READ|VM_PROT_WRITE), 2, (os/kern) protection failure in dsc::__DATA_CONST:__const, 
 	// so we need to disable dyld-in-cache here. (or we can use VM_PROT_READ|VM_PROT_WRITE|VM_PROT_COPY)
 	char **envc = envbuf_mutcopy((const char **)envp);
-	envbuf_setenv(&envc, "DYLD_IN_CACHE", "0");
+	if(envbuf_getenv(envc, "DYLD_INSERT_LIBRARIES")) {
+		envbuf_setenv(&envc, "DYLD_IN_CACHE", "0");
+	}
 
-	if(!dyld_patch_global_enabled)
+	if(!jbclient_dyld_patch_enabled())
 	{
 		if (spawnConfig & kSpawnConfigTrust) {
 			trust_insert_libraries(envc);
@@ -354,6 +310,8 @@ int roothide_systemhook___posix_spawn_posthook(pid_t *restrict pidp, const char 
 	} else if (ret == 0 && pid > 0) {
 		if (should_suspend) {
 			if(jbdSpawnPatchChild(pid, should_resume) != 0) { // jdb fault? kill
+				//just kill it instead of letting it hang forever, and the requester decides what to do later
+				kill(pid, SIGQUIT); //core dump
 				kill(pid, SIGKILL);
 				return 202;
 			}
@@ -377,7 +335,7 @@ int roothide_systemhook___execve_prehook(const char *path, char *const argv[], c
 
 	/* some processes are only allowed to call execve but not posix_spawn,
 	 e.g: "configd" on ios15, we need to trace it so that we can patch the subprocess before it runs. */
-	if(ret==EPERM && access(path, X_OK)==0)
+	if(ret==EPERM && access(path, X_OK)==0 && sandbox_check(getpid(), "process-fork", SANDBOX_CHECK_NO_REPORT, NULL) == 0)
 	{
 		trust_binary = __no_need_to_trust_now__;
 		return execve_hook_shared(path, argv, envp, orig, trust_binary);
@@ -405,7 +363,9 @@ int roothide_systemhook___execve_posthook(const char *path, char *const argv[], 
 	while(!traced) usleep(10*1000);
 
 	char **envc = envbuf_mutcopy((const char **)envp);
-	envbuf_setenv(&envc, "DYLD_IN_CACHE", "0");
+	if(envbuf_getenv(envc, "DYLD_INSERT_LIBRARIES")) {
+		envbuf_setenv(&envc, "DYLD_IN_CACHE", "0");
+	}
 	
 	int ret = __execve_orig(path, argv, envc);
 	int olderr = errno;
@@ -413,7 +373,16 @@ int roothide_systemhook___execve_posthook(const char *path, char *const argv[], 
 	envbuf_free(envc);
 
 	// exec* should never return if successful
-	jbdExecTraceCancel(path);
+
+	bool detached = false;
+
+	if(jbdExecTraceCancel(path, &detached) != 0) {
+		//broken process
+		exit(99);
+	}
+
+	//wait for detach
+	while(!detached) usleep(10*1000);
 
 	errno = olderr;
 	return ret;
@@ -495,20 +464,19 @@ extern int parse_dyldhook_jbinfo(char **jbRootPathOut, char **bootUUIDOut, char 
 
 void roothide_init()
 {
-	const char* DYLD_IN_CACHE = getenv("DYLD_IN_CACHE");
-	if(strcmp(DYLD_IN_CACHE, "0") == 0) {
-		unsetenv("DYLD_IN_CACHE");
+	if(getenv("DYLD_INSERT_LIBRARIES")) {
+		const char* DYLD_IN_CACHE = getenv("DYLD_IN_CACHE");
+		if(DYLD_IN_CACHE && strcmp(DYLD_IN_CACHE, "0") == 0) {
+			unsetenv("DYLD_IN_CACHE");
+		}
 	}
 
 	HOOK_DYLIB_PATH = strdup(dyld_image_path_containing_address(&__dso_handle));
 
-	// if(parse_dyldhook_jbinfo(NULL, NULL, NULL, NULL) != 0)
-	// {
-	// 	dyld_patch_global_enabled = jbclient_dyld_patch_enabled();
-	// 	if(!dyld_patch_global_enabled) {
-	// 		dyld_patch_fallback_enabled = true;
-	// 	}
-	// }
+	if(parse_dyldhook_jbinfo(NULL, NULL, NULL, NULL) != 0)
+	{
+		dyld_patch_fallback_enabled = true;
+	}
 }
 
 void roothide_init_with_checkin(const char* rootdir)
@@ -527,7 +495,7 @@ void roothide_init_with_executable(const char* executable)
 {
 	if (__builtin_available(iOS 16.0, *))
 	{
-		if(!is_app_path(executable)) {
+		if(!isRemovableBundlePath(executable)) {
 			litehook_hook_function(__sysctl, __sysctl_hook);
 			litehook_hook_function(__sysctlbyname, __sysctlbyname_hook);
 		}

@@ -13,42 +13,7 @@ int roothide_unsupport_request()
 
 bool roothide_domain_allowed(audit_token_t clientToken)
 {
-	//fast path
-	uid_t uid = audit_token_to_euid(clientToken);
-	if(uid != 501) return true;
-
-	pid_t pid = audit_token_to_pid(clientToken);
-
-	uint32_t csflags = 0;
-    csops(pid, CS_OPS_STATUS, &csflags, sizeof(csflags));
-    if((csflags & CS_PLATFORM_BINARY) != 0) {
-        return true;
-    }
-
-	const char* procpath = proc_get_path(pid,NULL);
-	if(procpath && string_has_suffix(procpath, "/Dopamine.app/Dopamine")) 
-	{
-		/* if the jailbreak activation is interrupted for some reason, 
-			we prevent the app from relaunching to prevent the system from being in an unknown state */
-		if(launchdhookFirstLoad) {
-#ifdef ENABLE_LOGS
-launchd_panic("reboot device due to jailbreak failure!");
-#endif
-			kill(pid, SIGKILL);
-			return false;
-		}
-
-		char roothidefile[PATH_MAX];
-		snprintf(roothidefile, sizeof(roothidefile), "%s.roothide", procpath);
-		if(access(roothidefile, F_OK) != 0) {
-			kill(pid, SIGKILL);
-			return false;
-		}
-
-		return true;
-	}
-
-	//after checking Dopamine app (always allows Dopamine app to check in even if it is blacklisted)
+	//its fast enough
 	if(isBlacklistedToken(&clientToken)) {
 		JBLogDebug("ignore xpc message from blacklisted process (%d),%s", audit_token_to_pid(clientToken), proc_get_path(audit_token_to_pid(clientToken),NULL));
 		return false;
@@ -57,17 +22,17 @@ launchd_panic("reboot device due to jailbreak failure!");
 	return true;
 }
 
-extern void recurse_collect_untrusted_cdhashes(const char *path, const char *callerImagePath, const char *callerExecutablePath, uint32_t *preferredArchTypes, uint32_t *preferredArchSubtypes, size_t preferredArchCount, cdhash_t **cdhashesOut, uint32_t *cdhashCountOut);
+typedef struct {
+	uint32_t Count;
+	uint32_t* Types;
+	uint32_t* Subtypes;
+} preferredArchInfo;
+void recurse_collect_untrusted_cdhashes(const char *path, const char *callerImagePath, const char *callerExecutablePath, const char *workingDir, preferredArchInfo* preferredArch, cdhash_t **cdhashesOut, uint32_t *cdhashCountOut);
 
-static int trust_macho_recurse(const char *machoPath, const char *dlopenCallerImagePath, const char *dlopenCallerExecutablePath, xpc_object_t preferredArchsArray)
+static int trust_macho_recurse(const char *machoPath, const char *dlopenCallerImagePath, const char *dlopenCallerExecutablePath, const char *workingDir, xpc_object_t preferredArchsArray)
 {
-	// Shared logic between client and server, implemented in client
-	// This should essentially mean these files never reach us in the first place
-	// But you know, never trust the client :D
-	extern bool can_skip_trusting_file(const char *machoPath, bool isLibrary, bool isClient);
-
-	if (can_skip_trusting_file(machoPath, dlopenCallerExecutablePath==NULL, false)) return -1;
-
+	if(!machoPath || !dlopenCallerExecutablePath) return -1;
+	
 	size_t preferredArchCount = 0;
 	if (preferredArchsArray) preferredArchCount = xpc_array_get_count(preferredArchsArray);
 	uint32_t preferredArchTypes[preferredArchCount];
@@ -81,10 +46,12 @@ static int trust_macho_recurse(const char *machoPath, const char *dlopenCallerIm
 			preferredArchSubtypes[i] = xpc_dictionary_get_uint64(arch, "subtype");
 		}
 	}
+	
+	preferredArchInfo preferredArch = {preferredArchCount, preferredArchTypes, preferredArchSubtypes};
 
 	cdhash_t *cdhashes = NULL;
 	uint32_t cdhashesCount = 0;
-	recurse_collect_untrusted_cdhashes(machoPath, dlopenCallerImagePath, dlopenCallerExecutablePath, preferredArchTypes, preferredArchSubtypes, preferredArchCount, &cdhashes, &cdhashesCount);
+	recurse_collect_untrusted_cdhashes(machoPath, dlopenCallerImagePath, dlopenCallerExecutablePath, workingDir, &preferredArch, &cdhashes, &cdhashesCount);
 	if (cdhashes && cdhashesCount > 0) {
 		jb_trustcache_add_cdhashes(cdhashes, cdhashesCount);
 		free(cdhashes);
@@ -92,18 +59,18 @@ static int trust_macho_recurse(const char *machoPath, const char *dlopenCallerIm
 	return 0;
 }
 
-static int roothide_trust_executable_recurse(const char *executablePath, xpc_object_t preferredArchsArray)
+int roothide_trust_executable_recurse(const char *executablePath, const char *processWorkingDir, xpc_object_t preferredArchsArray)
 {
-	return trust_macho_recurse(executablePath, NULL, NULL, preferredArchsArray);
+	return trust_macho_recurse(executablePath, NULL, executablePath, processWorkingDir, preferredArchsArray);
 }
 
-static int roothide_trust_library_recurse(const char *libraryPath, const char *callerLibraryPath, const char *callerExecutablePath)
+static int roothide_trust_library_recurse(const char *libraryPath, const char *callerLibraryPath, const char *callerExecutablePath, const char *currentWorkingDir)
 {
 	// When trusting a library that's dlopened at runtime, we need to pass the caller path
 	// This is to support dlopen("@executable_path/whatever", RTLD_NOW) and stuff like that
 	// (Yes that is a thing >.<)
 	// Also we need to pass the path of the image that called dlopen due to @loader_path, sigh...
-	return trust_macho_recurse(libraryPath, callerLibraryPath, callerExecutablePath, NULL);
+	return trust_macho_recurse(libraryPath, callerLibraryPath, callerExecutablePath, currentWorkingDir, NULL);
 }
 
 static int roothide_jailbroken_check(audit_token_t *callerToken, bool* jailbroken)
@@ -121,12 +88,13 @@ static int roothide_palehide_present(audit_token_t *callerToken, bool* palehide)
 		if(jbinfo(palera1n)=='hide') {
 			result = true;
 		} else {
-			mach_port_t tfp0 = MACH_PORT_NULL;
-			kern_return_t kr = task_for_pid(mach_task_self(), 0, &tfp0);
-			if(kr == KERN_SUCCESS && MACH_PORT_VALID(tfp0)) {
-				mach_port_deallocate(mach_task_self(), tfp0);
-				result = true;
-			}
+			// hang forver on iphone7p ios15.8.2
+			// mach_port_t tfp0 = MACH_PORT_NULL;
+			// kern_return_t kr = task_for_pid(mach_task_self(), 0, &tfp0);
+			// if(kr == KERN_SUCCESS && MACH_PORT_VALID(tfp0)) {
+			// 	mach_port_deallocate(mach_task_self(), tfp0);
+			// 	result = true;
+			// }
 		}
 	});
 
@@ -181,6 +149,40 @@ static int roothide_jailbreakd_checkin(audit_token_t *callerToken, xpc_object_t 
 	return 0;
 }
 
+static int roothide_dyld_patch_enabled(audit_token_t *callerToken, bool* enabled)
+{
+	*enabled = jbinfo(dyld_patch_enabled);
+	return 0;
+}
+
+static int roothide_set_dyld_patch(audit_token_t *callerToken, bool enabled)
+{
+	pid_t pid = audit_token_to_pid(*callerToken);
+	uid_t uid = audit_token_to_euid(*callerToken);
+
+    uint32_t csFlags = 0;
+    csops(getpid(), CS_OPS_STATUS, &csFlags, sizeof(csFlags));
+
+	if(uid != 0 && (csFlags & CS_PLATFORM_BINARY)==0) {
+		JBLogError("roothide_set_dyld_patch: denying request from %d,%d", pid, uid);
+		return -1;
+	}
+	
+#ifdef __arm64e__
+	if (!__builtin_available(iOS 16.0, *))
+	{
+		if(roothide_config_set_spinlock_fix(enabled) != 0) {
+			JBLogError("roothide_config_set_spinlock_fix failed");
+			return -1;
+		}
+	}
+#endif
+
+	jbinfo(dyld_patch_enabled) = enabled;
+	
+	return 0;
+}
+
 struct jbserver_domain gRootHideDomain = {
 	.permissionHandler = roothide_domain_allowed,
 	.actions = {
@@ -231,15 +233,6 @@ struct jbserver_domain gRootHideDomain = {
                     { 0 },
             },
         },
-		// JBS_ROOTHIDE_TRUST_EXECUTABLE_RECURSE
-		{
-			.handler = roothide_trust_executable_recurse,
-			.args = (jbserver_arg[]){
-				{ .name = "executable-path", .type = JBS_TYPE_STRING, .out = false },
-				{ .name = "preferred-archs", .type = JBS_TYPE_ARRAY, .out = false },
-				{ 0 },
-			},
-		},
 		// JBS_ROOTHIDE_TRUST_LIBRARY_RECURSE
 		{
 			.handler = roothide_trust_library_recurse,
@@ -247,9 +240,38 @@ struct jbserver_domain gRootHideDomain = {
 				{ .name = "library-path", .type = JBS_TYPE_STRING, .out = false },
 				{ .name = "caller-library-path", .type = JBS_TYPE_STRING, .out = false },
 				{ .name = "caller-executable-path", .type = JBS_TYPE_STRING, .out = false },
+				{ .name = "current-working-dir", .type = JBS_TYPE_STRING, .out = false },
 				{ 0 },
 			},
 		},
+		// JBS_ROOTHIDE_TRUST_EXECUTABLE_RECURSE
+		{
+			.handler = roothide_trust_executable_recurse,
+			.args = (jbserver_arg[]){
+				{ .name = "executable-path", .type = JBS_TYPE_STRING, .out = false },
+				{ .name = "process-working-dir", .type = JBS_TYPE_STRING, .out = false },
+				{ .name = "preferred-archs", .type = JBS_TYPE_ARRAY, .out = false },
+				{ 0 },
+			},
+		},
+		//JBS_ROOTHIDE_DYLD_PATCH_ENABLED_GET
+        {
+            .handler = roothide_dyld_patch_enabled,
+            .args = (jbserver_arg[]) {
+                    { .name = "caller-token", .type = JBS_TYPE_CALLER_TOKEN, .out = false },
+                    { .name = "enabled", .type = JBS_TYPE_BOOL, .out = true },
+                    { 0 },
+            },
+        },
+		//JBS_ROOTHIDE_DYLD_PATCH_ENABLED_SET
+        {
+            .handler = roothide_set_dyld_patch,
+            .args = (jbserver_arg[]) {
+                    { .name = "caller-token", .type = JBS_TYPE_CALLER_TOKEN, .out = false },
+                    { .name = "enabled", .type = JBS_TYPE_BOOL, .out = false },
+                    { 0 },
+            },
+        },
 		{ 0 },
 	},
 };
