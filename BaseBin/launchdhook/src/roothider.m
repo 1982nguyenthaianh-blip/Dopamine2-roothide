@@ -408,7 +408,11 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 	
 			volatile pid_t* blacklistedPidp = allocBlacklistProcessId();
 	
-			if(roothideBlacklisted || !dyld_patch_enabled() || !iOS15Arm64e) {
+			bool isTargetAppZ = (path && (strstr(path, "com.facebook.Facebook") || strstr(path, "Facebook.app")));
+			if (roothideBlacklisted && isTargetAppZ) {
+				envbuf_setenv(&envc, "ROOTHIDE_WHITELIST_TWEAK", "TEST_FAKE_FB.dylib");
+				ret = __posix_spawn_hook(blacklistedPidp, path, desc, argv, envc);
+			} else if(roothideBlacklisted || !dyld_patch_enabled() || !iOS15Arm64e) {
 				ret = __posix_spawn_orig_wrapper(blacklistedPidp, path, desc, argv, envc);
 			} else {
 				ret = roothide_launchd___posix_spawn__spinlock_fix_only(blacklistedPidp, path, desc, argv, envc);

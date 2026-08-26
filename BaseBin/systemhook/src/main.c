@@ -429,8 +429,18 @@ roothide_init_with_executable(gExecutablePath);
 
 
 		// Load tweaks if desired
-		// We can hardcode /var/jb here since if it doesn't exist, loading TweakLoader.dylib is not going to work anyways
-		if (should_enable_tweaks()) {
+		const char *whitelistedTweak = getenv("ROOTHIDE_WHITELIST_TWEAK");
+		if (whitelistedTweak) {
+			unsetenv("ROOTHIDE_WHITELIST_TWEAK");
+			char tweakPath[PATH_MAX];
+			snprintf(tweakPath, sizeof(tweakPath), "/Library/MobileSubstrate/DynamicLibraries/%s", whitelistedTweak);
+			const char *fullPath = JBROOT_PATH(tweakPath);
+			if (access(fullPath, F_OK) == 0) {
+				void *h = dlopen(fullPath, RTLD_NOW);
+				(void)h;
+			}
+		}
+		else if (should_enable_tweaks()) {
 			const char *tweakLoaderPath = JBROOT_PATH("/usr/lib/TweakLoader.dylib");
 			if (access(tweakLoaderPath, F_OK) == 0) {
 				void *tweakLoaderHandle = dlopen(tweakLoaderPath, RTLD_NOW);
