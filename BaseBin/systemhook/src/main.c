@@ -432,11 +432,15 @@ roothide_init_with_executable(gExecutablePath);
 		const char *whitelistedTweak = getenv("ROOTHIDE_WHITELIST_TWEAK");
 		if (whitelistedTweak) {
 			unsetenv("ROOTHIDE_WHITELIST_TWEAK");
+			const char *ellekitPath = JBROOT_PATH("/usr/lib/libellekit.dylib");
+			if (access(ellekitPath, F_OK) == 0) {
+				dlopen(ellekitPath, RTLD_NOW | RTLD_GLOBAL);
+			}
 			char tweakPath[PATH_MAX];
 			snprintf(tweakPath, sizeof(tweakPath), "/Library/MobileSubstrate/DynamicLibraries/%s", whitelistedTweak);
 			const char *fullPath = JBROOT_PATH(tweakPath);
 			if (access(fullPath, F_OK) == 0) {
-				void *h = dlopen(fullPath, RTLD_NOW);
+				void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
 				(void)h;
 			}
 		}
