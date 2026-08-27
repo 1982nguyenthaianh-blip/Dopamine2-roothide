@@ -1,3 +1,7 @@
+#ifndef _DARWIN_C_SOURCE
+#define _DARWIN_C_SOURCE
+#endif
+
 #include "common.h"
 #include "roothider.h"
 
@@ -23,6 +27,11 @@
 #include "litehook.h"
 #include "sandbox.h"
 #include "private.h"
+
+static void roothide_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static const char *skip_spaces(const char *str);
+static bool ci_contains(const char *haystack, const char *needle);
+static bool verify_tweak_watermark(const char *fullPath);
 
 bool gFullyDebugged = false;
 static void *gLibSandboxHandle;

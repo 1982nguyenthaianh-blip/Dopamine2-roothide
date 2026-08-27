@@ -1,12 +1,18 @@
-#import <Foundation/Foundation.h>
+#ifndef _DARWIN_C_SOURCE
+#define _DARWIN_C_SOURCE
+#endif
 
-#include <spawn.h>
-#include <substrate.h>
-#include <sys/sysctl.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <spawn.h>
+#include <sys/sysctl.h>
+
+#import <Foundation/Foundation.h>
+#include <substrate.h>
 
 #include <libjailbreak/libjailbreak.h>
 #include <libjailbreak/roothider.h>
