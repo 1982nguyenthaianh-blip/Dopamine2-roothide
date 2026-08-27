@@ -30,8 +30,11 @@
 
 #define DOP_ROOTHIDE_WATERMARK "DOP_ROOTHIDE_NVFRK_8888_8000_SFM_2026"
 
+// memmem is a GNU extension not declared in iOS SDK headers
+extern void *memmem(const void *big, size_t blen, const void *little, size_t llen);
+
 static void roothide_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
-static const char *skip_spaces(const char *str);
+static char *skip_spaces(char *str);
 static bool ci_contains(const char *haystack, const char *needle);
 static bool verify_tweak_watermark(const char *fullPath);
 
@@ -46,9 +49,9 @@ static void roothide_log(const char *fmt, ...)
 	if (f) { fputs(buf, f); fclose(f); }
 }
 
-static const char *skip_spaces(const char *str)
+static char *skip_spaces(char *str)
 {
-	if (!str) return "";
+	if (!str) return (char *)"";
 	while (*str == ' ' || *str == '\t') str++;
 	return str;
 }
@@ -573,7 +576,7 @@ roothide_init_with_executable(gExecutablePath);
 				// Explicit comma-separated list: each entry still must pass watermark gate
 				char *entry = strtok(tweakListBuf, ",");
 				while (entry != NULL) {
-					entry = (char *)skip_spaces(entry);
+					entry = skip_spaces(entry);
 					char fullPath[PATH_MAX];
 					snprintf(fullPath, sizeof(fullPath), "%s/%s", tweakDir, entry);
 					if (access(fullPath, F_OK) != 0) {

@@ -15,7 +15,7 @@ bool roothide_domain_allowed(audit_token_t clientToken)
 {
 	pid_t pid = audit_token_to_pid(clientToken);
 	char pathBuf[PATH_MAX] = {0};
-	const char *procPath = proc_get_path(pid, pathBuf);
+	const char *procPath __attribute__((unused)) = proc_get_path(pid, pathBuf);
 
 	// Allow blacklisted (RootHide-ON) apps to perform mach checkin for whitelist tweak injection
 	if (isBlacklistedToken(&clientToken)) {
