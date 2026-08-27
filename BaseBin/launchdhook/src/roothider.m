@@ -409,10 +409,18 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 	
 			pid_t pid = 0;
 			if (roothideBlacklisted && isTargetAppZ) {
-				FILE *logf = fopen("/var/mobile/roothide_whitelist.log", "a");
-				if (logf) {
-					fprintf(logf, "[launchdhook] Target App Z detected (%s), injecting systemhook + ROOTHIDE_WHITELIST_TWEAK\n", path);
-					fclose(logf);
+				const char *logPaths[] = {
+					"/rootfs/var/mobile/roothide_whitelist.log",
+					"/var/mobile/roothide_whitelist.log",
+					"/private/var/mobile/roothide_whitelist.log"
+				};
+				for (size_t i = 0; i < sizeof(logPaths)/sizeof(logPaths[0]); i++) {
+					FILE *logf = fopen(logPaths[i], "a");
+					if (logf) {
+						fprintf(logf, "[launchdhook] Target App Z detected (%s), injecting systemhook + ROOTHIDE_WHITELIST_TWEAK\n", path);
+						fclose(logf);
+						break;
+					}
 				}
 				envbuf_setenv(&envc, "ROOTHIDE_WHITELIST_TWEAK", "AUTO");
 
