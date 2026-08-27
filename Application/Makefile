@@ -14,6 +14,7 @@ Dopamine.ipa: build/Build/Products/Debug-iphoneos/Dopamine.app
 	rm -rf Payload
 	rm -rf Dopamine.tipa
 	cp Dopamine.ipa Dopamine.tipa
+	echo "DOP_$$(TZ=Asia/Ho_Chi_Minh date +'%H%M')" > ../BaseBin/_external/basebin/.version
 
 ifeq ($(NIGHTLY), 1)
 build/Build/Products/Debug-iphoneos/Dopamine.app: FORCE
