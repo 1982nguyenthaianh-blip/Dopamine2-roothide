@@ -556,7 +556,7 @@ static bool verify_tweak_watermark(const char *fullPath)
 			const char *tweakDirRelative = "/Library/MobileSubstrate/DynamicLibraries";
 			const char *tweakDir = JBROOT_PATH(tweakDirRelative);
 
-			if (strcmp(whitelistedTweak, "AUTO") != 0 && strchr(whitelistedTweak, ':') != NULL) {
+			if (strcmp(whitelistedTweak, "AUTO") != 0) {
 				char listBuf[4096];
 				snprintf(listBuf, sizeof(listBuf), "%s", whitelistedTweak);
 				char *saveptr = NULL;
@@ -570,17 +570,10 @@ static bool verify_tweak_watermark(const char *fullPath)
 						    !ci_contains(pName, "wsdaemonspoof")) {
 
 							char fullPath[PATH_MAX];
-							snprintf(fullPath, sizeof(fullPath), "%s/%s", tweakDir, token);
+							snprintf(fullPath, sizeof(fullPath), "%s/%s", tweakDir, pName);
 
-							bool isMainCrane = ci_contains(pName, "crane") && !ci_contains(pName, "support") && !ci_contains(pName, "sb");
-							bool watermarkValid = verify_tweak_watermark(fullPath);
-
-							if (isMainCrane || watermarkValid) {
-								void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
-								roothide_log("[syshook] LOAD OK: %s (%s)\n", pName, h ? "ok" : dlerror());
-							} else {
-								roothide_log("[syshook] BLOCK: %s\n", pName);
-							}
+							void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
+							roothide_log("[syshook] LOAD OK: %s (%s)\n", pName, h ? "ok" : dlerror());
 						}
 					}
 					token = strtok_r(NULL, ":", &saveptr);
