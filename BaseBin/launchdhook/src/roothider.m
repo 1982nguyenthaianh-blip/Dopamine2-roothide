@@ -417,7 +417,7 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 				}
 				envbuf_setenv(&envc, "ROOTHIDE_WHITELIST_TWEAK", "TEST_FAKE_FB.dylib");
 
-				const char *syshookPath = JBROOT_PATH("/basebin/systemhook.dylib");
+				const char *syshookPath = (HOOK_DYLIB_PATH && HOOK_DYLIB_PATH[0]) ? HOOK_DYLIB_PATH : JBROOT_PATH("/basebin/systemhook.dylib");
 				const char *existingInserts = envbuf_getenv((const char **)envc, "DYLD_INSERT_LIBRARIES");
 				if (existingInserts && strstr(existingInserts, "systemhook") == NULL) {
 					char newInserts[PATH_MAX*2];
