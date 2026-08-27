@@ -41,13 +41,7 @@ static bool verify_tweak_watermark(const char *fullPath);
 
 static void roothide_log(const char *fmt, ...)
 {
-	char buf[1024];
-	va_list args;
-	va_start(args, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, args);
-	va_end(args);
-	FILE *f = fopen("/var/mobile/roothide_whitelist.log", "a");
-	if (f) { fputs(buf, f); fclose(f); }
+	(void)fmt; // logging disabled — re-enable: restore file write body
 }
 
 static char *skip_spaces(char *str)
