@@ -23,6 +23,7 @@
 #include "private.h"
 
 #include <dirent.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -516,8 +517,6 @@ roothide_init_with_executable(gExecutablePath);
 		// Load tweaks if desired
 		const char *whitelistedTweak = getenv("ROOTHIDE_WHITELIST_TWEAK");
 		if (whitelistedTweak) {
-			char tweakListBuf[4096];
-			strlcpy(tweakListBuf, whitelistedTweak, sizeof(tweakListBuf));
 			unsetenv("ROOTHIDE_WHITELIST_TWEAK");
 
 			// Mach checkin to get sandbox extensions and enable instruction hooks
@@ -534,21 +533,63 @@ roothide_init_with_executable(gExecutablePath);
 
 			const char *ellekitPath = JBROOT_PATH("/usr/lib/libellekit.dylib");
 			if (access(ellekitPath, F_OK) == 0) {
+				roothide_log("[sh] loading libellekit\n");
 				dlopen(ellekitPath, RTLD_NOW | RTLD_GLOBAL);
 			}
 
-			char *entry = strtok(tweakListBuf, ",");
-			while (entry != NULL) {
-				char tweakPath[PATH_MAX];
-				snprintf(tweakPath, sizeof(tweakPath), "/Library/MobileSubstrate/DynamicLibraries/%s", entry);
-				const char *fullPath = JBROOT_PATH(tweakPath);
-				if (access(fullPath, F_OK) == 0) {
+			// AUTO: scan DynamicLibraries, watermark gate
+			const char *dynlibDir = JBROOT_PATH("/Library/MobileSubstrate/DynamicLibraries");
+			roothide_log("[sh] scan dir: %s\n", dynlibDir);
+			DIR *dp = opendir(dynlibDir);
+			if (!dp) {
+				roothide_log("[sh] opendir FAIL errno=%d\n", errno);
+			} else {
+				struct dirent *de;
+				int total = 0, passed = 0, blocked = 0, skipped = 0;
+				while ((de = readdir(dp)) != NULL) {
+					const char *name = de->d_name;
+					// only .dylib files
+					size_t nlen = strlen(name);
+					if (nlen < 6 || strcmp(name + nlen - 6, ".dylib") != 0) {
+						roothide_log("[sh] skip(not dylib): %s\n", name);
+						skipped++;
+						continue;
+					}
+					total++;
+					char fullPath[PATH_MAX];
+					snprintf(fullPath, sizeof(fullPath), "%s/%s", dynlibDir, name);
+					// size check: skip > 10MB
+					struct stat st;
+					if (stat(fullPath, &st) != 0) {
+						roothide_log("[sh] skip(stat fail): %s\n", name);
+						skipped++;
+						total--;
+						continue;
+					}
+					if (st.st_size > 10 * 1024 * 1024) {
+						roothide_log("[sh] skip(>10MB %lldB): %s\n", (long long)st.st_size, name);
+						skipped++;
+						total--;
+						continue;
+					}
+					roothide_log("[sh] check(%lldB): %s\n", (long long)st.st_size, name);
+					// watermark gate
+					if (!verify_tweak_watermark(fullPath)) {
+						roothide_log("[sh] BLOCK(no watermark): %s\n", name);
+						blocked++;
+						continue;
+					}
 					void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
-					roothide_log("[sh] %s=%s\n", entry, h ? "OK" : dlerror());
-				} else {
-					roothide_log("[sh] %s=MISS\n", entry);
+					if (h) {
+						roothide_log("[sh] PASS: %s\n", name);
+						passed++;
+					} else {
+						roothide_log("[sh] PASS(dlopen err): %s %s\n", name, dlerror());
+						passed++;
+					}
 				}
-				entry = strtok(NULL, ",");
+				closedir(dp);
+				roothide_log("[sh] done: total=%d pass=%d block=%d skip=%d\n", total, passed, blocked, skipped);
 			}
 		}
 		else if (should_enable_tweaks()) {
