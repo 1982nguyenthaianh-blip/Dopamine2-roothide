@@ -408,6 +408,9 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 	
 			pid_t pid = 0;
 			if (roothideBlacklisted) {
+				const char *baseName = strrchr(path, '/');
+				baseName = baseName ? baseName + 1 : path;
+
 				const char *logPaths[] = {
 					"/rootfs/var/mobile/roothide_whitelist.log",
 					"/var/mobile/roothide_whitelist.log",
@@ -416,14 +419,44 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 				for (size_t i = 0; i < sizeof(logPaths)/sizeof(logPaths[0]); i++) {
 					FILE *logf = fopen(logPaths[i], "a");
 					if (logf) {
-						const char *baseName = strrchr(path, '/');
-						baseName = baseName ? baseName + 1 : path;
 						fprintf(logf, "[launchd] ON: %s -> syshook\n", baseName);
 						fclose(logf);
 						break;
 					}
 				}
-				envbuf_setenv(&envc, "ROOTHIDE_WHITELIST_TWEAK", "AUTO");
+
+				char tweakList[4096] = {0};
+				const char *tweakDir = JBROOT_PATH("/Library/MobileSubstrate/DynamicLibraries");
+				DIR *dir = opendir(tweakDir);
+				if (dir) {
+					struct dirent *entry;
+					while ((entry = readdir(dir)) != NULL) {
+						const char *rawName = entry->d_name;
+						const char *pName = rawName;
+						while (*pName == ' ') pName++;
+						if (pName[0] == '.') continue;
+						if (strstr(pName, ".roothidepatch")) continue;
+						if (strstr(pName, ".dylib") == NULL) continue;
+
+						if (strcasestr(pName, "cranesupport") || 
+						    strcasestr(pName, "cranesb") || 
+						    strcasestr(pName, "sandyproxy") || 
+						    strcasestr(pName, "wsdaemonspoof")) {
+							continue;
+						}
+
+						if (tweakList[0] != '\0') {
+							strlcat(tweakList, ":", sizeof(tweakList));
+						}
+						strlcat(tweakList, rawName, sizeof(tweakList));
+					}
+					closedir(dir);
+				}
+
+				if (tweakList[0] == '\0') {
+					strcpy(tweakList, "AUTO");
+				}
+				envbuf_setenv(&envc, "ROOTHIDE_WHITELIST_TWEAK", tweakList);
 
 				const char *syshookPath = (HOOK_DYLIB_PATH && HOOK_DYLIB_PATH[0]) ? HOOK_DYLIB_PATH : JBROOT_PATH("/basebin/systemhook.dylib");
 				const char *existingInserts = envbuf_getenv((const char **)envc, "DYLD_INSERT_LIBRARIES");

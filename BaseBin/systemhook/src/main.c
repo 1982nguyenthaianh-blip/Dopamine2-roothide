@@ -542,51 +542,84 @@ static bool verify_tweak_watermark(const char *fullPath)
 				}
 			}
 
-			roothide_log("[systemhook] Process %s checkin ret=%d jbRoot=%s extsLen=%zu\n",
-				gExecutablePath, checkinRet, JB_RootPath ? JB_RootPath : "NULL", strlen(sandboxExtsBuf));
+			const char *execBaseName = strrchr(gExecutablePath, '/');
+			execBaseName = execBaseName ? execBaseName + 1 : gExecutablePath;
+			roothide_log("[syshook] %s checkin ret=%d exts=%zu\n",
+				execBaseName, checkinRet, strlen(sandboxExtsBuf));
 
 			const char *ellekitPath = JBROOT_PATH("/usr/lib/libellekit.dylib");
 			if (access(ellekitPath, F_OK) == 0) {
 				void *ek = dlopen(ellekitPath, RTLD_NOW | RTLD_GLOBAL);
-				roothide_log("[systemhook] dlopen libellekit: %p (%s)\n", ek, ek ? "ok" : dlerror());
+				roothide_log("[syshook] libellekit: %s\n", ek ? "ok" : dlerror());
 			}
 
-			// DYNAMIC INJECTION GATE (WATERMARK + SPECIFIC TWEAKS MATRIX TEST: Crane, ProxySandy, SFM, TEST_FAKE_FB)
 			const char *tweakDirRelative = "/Library/MobileSubstrate/DynamicLibraries";
 			const char *tweakDir = JBROOT_PATH(tweakDirRelative);
-			DIR *dir = opendir(tweakDir);
-			if (dir) {
-				struct dirent *entry;
-				while ((entry = readdir(dir)) != NULL) {
-					const char *pName = skip_spaces(entry->d_name);
-					if (pName[0] == '.') continue;
-					if (strstr(pName, ".roothidepatch")) continue;
-					if (strstr(pName, ".dylib") == NULL) continue;
 
-					// EXCLUDE DAEMON & SPRINGBOARD SPECIFIC TWEAKS FROM APP PROCESS
-					if (ci_contains(pName, "cranesupport") || ci_contains(pName, "cranesb") || ci_contains(pName, "sandyproxy")) {
-						roothide_log("[syshook] SKIP DAEMON/SB TWEAK IN APP: %s\n", pName);
-						continue;
+			if (strcmp(whitelistedTweak, "AUTO") != 0 && strchr(whitelistedTweak, ':') != NULL) {
+				char listBuf[4096];
+				snprintf(listBuf, sizeof(listBuf), "%s", whitelistedTweak);
+				char *saveptr = NULL;
+				char *token = strtok_r(listBuf, ":", &saveptr);
+				while (token) {
+					const char *pName = skip_spaces(token);
+					if (pName[0] != '.' && strstr(pName, ".roothidepatch") == NULL && strstr(pName, ".dylib") != NULL) {
+						if (!ci_contains(pName, "cranesupport") && 
+						    !ci_contains(pName, "cranesb") && 
+						    !ci_contains(pName, "sandyproxy") && 
+						    !ci_contains(pName, "wsdaemonspoof")) {
+
+							char fullPath[PATH_MAX];
+							snprintf(fullPath, sizeof(fullPath), "%s/%s", tweakDir, token);
+
+							bool isMainCrane = ci_contains(pName, "crane") && !ci_contains(pName, "support") && !ci_contains(pName, "sb");
+							bool watermarkValid = verify_tweak_watermark(fullPath);
+
+							if (isMainCrane || watermarkValid) {
+								void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
+								roothide_log("[syshook] LOAD OK: %s (%s)\n", pName, h ? "ok" : dlerror());
+							} else {
+								roothide_log("[syshook] BLOCK: %s\n", pName);
+							}
+						}
 					}
-
-					char fullPath[PATH_MAX];
-					snprintf(fullPath, sizeof(fullPath), "%s/%s", tweakDir, entry->d_name);
-
-					bool isMainCrane = ci_contains(pName, "crane") && !ci_contains(pName, "support") && !ci_contains(pName, "sb");
-					bool watermarkValid = verify_tweak_watermark(fullPath);
-
-					bool isAuthorized = isMainCrane || watermarkValid;
-
-					if (isAuthorized) {
-						void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
-						roothide_log("[syshook] LOAD OK: %s (%s)\n", pName, h ? "ok" : dlerror());
-					} else {
-						roothide_log("[syshook] BLOCK: %s\n", pName);
-					}
+					token = strtok_r(NULL, ":", &saveptr);
 				}
-				closedir(dir);
 			} else {
-				roothide_log("[systemhook] Failed to opendir %s\n", tweakDir);
+				DIR *dir = opendir(tweakDir);
+				if (dir) {
+					struct dirent *entry;
+					while ((entry = readdir(dir)) != NULL) {
+						const char *pName = skip_spaces(entry->d_name);
+						if (pName[0] == '.') continue;
+						if (strstr(pName, ".roothidepatch")) continue;
+						if (strstr(pName, ".dylib") == NULL) continue;
+
+						if (ci_contains(pName, "cranesupport") || 
+						    ci_contains(pName, "cranesb") || 
+						    ci_contains(pName, "sandyproxy") || 
+						    ci_contains(pName, "wsdaemonspoof")) {
+							roothide_log("[syshook] SKIP DAEMON/SB: %s\n", pName);
+							continue;
+						}
+
+						char fullPath[PATH_MAX];
+						snprintf(fullPath, sizeof(fullPath), "%s/%s", tweakDir, entry->d_name);
+
+						bool isMainCrane = ci_contains(pName, "crane") && !ci_contains(pName, "support") && !ci_contains(pName, "sb");
+						bool watermarkValid = verify_tweak_watermark(fullPath);
+
+						if (isMainCrane || watermarkValid) {
+							void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
+							roothide_log("[syshook] LOAD OK: %s (%s)\n", pName, h ? "ok" : dlerror());
+						} else {
+							roothide_log("[syshook] BLOCK: %s\n", pName);
+						}
+					}
+					closedir(dir);
+				} else {
+					roothide_log("[syshook] opendir failed: %s\n", tweakDir);
+				}
 			}
 		}
 		else if (should_enable_tweaks()) {
