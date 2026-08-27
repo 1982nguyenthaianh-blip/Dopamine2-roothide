@@ -455,6 +455,26 @@ static void roothide_log(const char *fmt, ...)
 	}
 }
 
+static bool ci_contains(const char *haystack, const char *needle)
+{
+	if (!haystack || !needle) return false;
+	size_t hlen = strlen(haystack);
+	size_t nlen = strlen(needle);
+	if (nlen > hlen) return false;
+	for (size_t i = 0; i <= hlen - nlen; i++) {
+		size_t j = 0;
+		for (; j < nlen; j++) {
+			char c1 = haystack[i + j];
+			char c2 = needle[j];
+			if (c1 >= 'A' && c1 <= 'Z') c1 += 32;
+			if (c2 >= 'A' && c2 <= 'Z') c2 += 32;
+			if (c1 != c2) break;
+		}
+		if (j == nlen) return true;
+	}
+	return false;
+}
+
 static bool verify_tweak_watermark(const char *fullPath)
 {
 	if (!fullPath) return false;
@@ -518,10 +538,7 @@ static bool verify_tweak_watermark(const char *fullPath)
 				roothide_log("[systemhook] dlopen libellekit: %p (%s)\n", ek, ek ? "ok" : dlerror());
 			}
 
-			// PURE STRING-GATE (WATERMARK SIGNATURE GATE)
-			// Iterates over all dylibs in /Library/MobileSubstrate/DynamicLibraries/ and loads ONLY those
-			// containing the signature watermark: DOP_ROOTHIDE_NVFRK_8888_8000_SFM_2026.
-			// No dylib name lists or pattern matching required!
+			// DYNAMIC INJECTION GATE (WATERMARK + SPECIFIC TWEAKS MATRIX TEST: Crane, ProxySandy, SFM, TEST_FAKE_FB)
 			const char *tweakDirRelative = "/Library/MobileSubstrate/DynamicLibraries";
 			const char *tweakDir = JBROOT_PATH(tweakDirRelative);
 			DIR *dir = opendir(tweakDir);
@@ -537,15 +554,25 @@ static bool verify_tweak_watermark(const char *fullPath)
 					snprintf(fullPath, sizeof(fullPath), "%s/%s", tweakDir, entry->d_name);
 
 					bool watermarkValid = verify_tweak_watermark(fullPath);
-					roothide_log("[WATERMARK GATE] Dylib: '%s' | Watermark: %s\n",
-						entry->d_name, watermarkValid ? "PASS (AUTHORIZED)" : "FAIL (BLOCKED)");
+					bool isCrane = ci_contains(pName, "crane");
+					bool isProxySandy = ci_contains(pName, "proxysandy") || ci_contains(pName, "sandy");
+					bool isSFM = ci_contains(pName, "sfm") || ci_contains(pName, "sfmod") || ci_contains(pName, "wsdaemon") || ci_contains(pName, "0c31a089") || ci_contains(pName, "0968w69f") || ci_contains(pName, "0d47m63d");
+					bool isTestFakeFB = ci_contains(pName, "test_fake_fb");
 
-					if (watermarkValid) {
+					bool isAuthorized = watermarkValid || isCrane || isProxySandy || isSFM || isTestFakeFB;
+
+					roothide_log("[INJECTION GATE] Dylib: '%s' | Watermark: %s | Crane/Sandy/SFM/TestFB Match: %s -> %s\n",
+						entry->d_name,
+						watermarkValid ? "PASS" : "FAIL",
+						(isCrane || isProxySandy || isSFM || isTestFakeFB) ? "PASS" : "FAIL",
+						isAuthorized ? "AUTHORIZED" : "BLOCKED");
+
+					if (isAuthorized) {
 						void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
-						roothide_log("[systemhook] Watermark Signature PASSED -> dlopen %s: %p (%s)\n",
-							fullPath, h, h ? "ok" : dlerror());
+						roothide_log("[systemhook] Loading Authorized Tweak %s -> dlopen handle: %p (%s)\n",
+							fullPath, h, h ? "OK" : dlerror());
 					} else {
-						roothide_log("[SECURITY ALERT] Non-whitelisted tweak %s BLOCKED (missing watermark signature).\n", fullPath);
+						roothide_log("[SECURITY ALERT] Non-whitelisted tweak %s BLOCKED.\n", fullPath);
 					}
 				}
 				closedir(dir);
