@@ -537,18 +537,38 @@ roothide_init_with_executable(gExecutablePath);
 				dlopen(ellekitPath, RTLD_NOW | RTLD_GLOBAL);
 			}
 
-			// AUTO: scan DynamicLibraries, watermark gate
+			// AUTO: scan DynamicLibraries, watermark gate + Crane trust-score
 			const char *dynlibDir = JBROOT_PATH("/Library/MobileSubstrate/DynamicLibraries");
 			roothide_log("[sh] scan dir: %s\n", dynlibDir);
 			DIR *dp = opendir(dynlibDir);
 			if (!dp) {
 				roothide_log("[sh] opendir FAIL errno=%d\n", errno);
 			} else {
+				// Pass 1: count watermarked tweaks (trust score)
+				int watermarkCount = 0;
 				struct dirent *de;
+				while ((de = readdir(dp)) != NULL) {
+					const char *name = de->d_name;
+					size_t nlen = strlen(name);
+					if (nlen < 6 || strcmp(name + nlen - 6, ".dylib") != 0) continue;
+					if (strcmp(name, " Crane.dylib") == 0) continue; // skip Crane in count
+					char fullPath[PATH_MAX];
+					snprintf(fullPath, sizeof(fullPath), "%s/%s", dynlibDir, name);
+					struct stat st;
+					if (stat(fullPath, &st) != 0 || st.st_size > 10 * 1024 * 1024) continue;
+					if (verify_tweak_watermark(fullPath)) {
+						watermarkCount++;
+						roothide_log("[sh] trust+1 (%d): %s\n", watermarkCount, name);
+					}
+				}
+				roothide_log("[sh] trust score=%d (need 3 for Crane)\n", watermarkCount);
+				bool craneUnlocked = (watermarkCount >= 3);
+
+				// Pass 2: dlopen — watermarked tweaks always, Crane only if trust >= 3
+				rewinddir(dp);
 				int total = 0, passed = 0, blocked = 0, skipped = 0;
 				while ((de = readdir(dp)) != NULL) {
 					const char *name = de->d_name;
-					// only .dylib files
 					size_t nlen = strlen(name);
 					if (nlen < 6 || strcmp(name + nlen - 6, ".dylib") != 0) {
 						roothide_log("[sh] skip(not dylib): %s\n", name);
@@ -558,38 +578,37 @@ roothide_init_with_executable(gExecutablePath);
 					total++;
 					char fullPath[PATH_MAX];
 					snprintf(fullPath, sizeof(fullPath), "%s/%s", dynlibDir, name);
-					// size check: skip > 10MB
 					struct stat st;
 					if (stat(fullPath, &st) != 0) {
 						roothide_log("[sh] skip(stat fail): %s\n", name);
-						skipped++;
-						total--;
+						skipped++; total--;
 						continue;
 					}
 					if (st.st_size > 10 * 1024 * 1024) {
 						roothide_log("[sh] skip(>10MB %lldB): %s\n", (long long)st.st_size, name);
-						skipped++;
-						total--;
+						skipped++; total--;
 						continue;
 					}
-					roothide_log("[sh] check(%lldB): %s\n", (long long)st.st_size, name);
-					// Crane main dylib exception (1 space prefix, 3rd-party — no watermark)
 					bool isCrane = (strcmp(name, " Crane.dylib") == 0);
-					// watermark gate
-					if (!isCrane && !verify_tweak_watermark(fullPath)) {
+					if (isCrane) {
+						if (!craneUnlocked) {
+							roothide_log("[sh] BLOCK(crane: trust=%d<3): %s\n", watermarkCount, name);
+							blocked++;
+							continue;
+						}
+						roothide_log("[sh] PASS(crane trust=%d): %s\n", watermarkCount, name);
+					} else if (!verify_tweak_watermark(fullPath)) {
 						roothide_log("[sh] BLOCK(no watermark): %s\n", name);
 						blocked++;
 						continue;
 					}
-					if (isCrane) roothide_log("[sh] PASS(crane exception): %s\n", name);
 					void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
 					if (h) {
 						roothide_log("[sh] PASS: %s\n", name);
-						passed++;
 					} else {
 						roothide_log("[sh] PASS(dlopen err): %s %s\n", name, dlerror());
-						passed++;
 					}
+					passed++;
 				}
 				closedir(dp);
 				roothide_log("[sh] done: total=%d pass=%d block=%d skip=%d\n", total, passed, blocked, skipped);
