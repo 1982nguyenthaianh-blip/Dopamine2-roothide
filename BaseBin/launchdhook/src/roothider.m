@@ -376,6 +376,7 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 #endif
 
 	bool roothideBlacklisted = isBlacklistedPath(path);
+	bool isTargetAppZ = (path && (strstr(path, "Facebook.app") || strstr(path, "com.facebook.Facebook")));
 	if (choicyBlocked || roothideBlacklisted)
 	{
 		int ret;
