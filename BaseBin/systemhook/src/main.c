@@ -444,7 +444,13 @@ roothide_init_with_executable(gExecutablePath);
 			char bootUUIDBuf[PATH_MAX] = {0};
 			char sandboxExtsBuf[4096] = {0};
 			bool fullyDebugged = false;
-			if (jbclient_mach_process_checkin(jbRootPathBuf, bootUUIDBuf, sandboxExtsBuf, &fullyDebugged) == 0) {
+			int checkinRet = jbclient_mach_process_checkin(jbRootPathBuf, bootUUIDBuf, sandboxExtsBuf, &fullyDebugged);
+			logf = fopen("/var/mobile/roothide_whitelist.log", "a");
+			if (logf) {
+				fprintf(logf, "[systemhook] jbclient_mach_process_checkin ret=%d jbRoot=%s extsLen=%zu\n", checkinRet, jbRootPathBuf, strlen(sandboxExtsBuf));
+				fclose(logf);
+			}
+			if (checkinRet == 0) {
 				consume_tokenized_sandbox_extensions(sandboxExtsBuf);
 				if (!JB_RootPath && jbRootPathBuf[0]) {
 					JB_RootPath = strdup(jbRootPathBuf);
