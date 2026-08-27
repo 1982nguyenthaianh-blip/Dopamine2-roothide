@@ -440,7 +440,11 @@ static void roothide_log(const char *fmt, ...)
 	vsnprintf(buf, sizeof(buf), fmt, args);
 	va_end(args);
 
+	char jbLogPath[PATH_MAX];
+	snprintf(jbLogPath, sizeof(jbLogPath), "%s/var/mobile/roothide_whitelist.log", JB_RootPath ? JB_RootPath : "/var/jb");
+
 	const char *paths[] = {
+		jbLogPath,
 		"/var/mobile/roothide_whitelist.log",
 		"/private/var/mobile/roothide_whitelist.log",
 		"/tmp/roothide_whitelist.log"
@@ -559,14 +563,19 @@ static bool verify_tweak_watermark(const char *fullPath)
 					if (strstr(pName, ".roothidepatch")) continue;
 					if (strstr(pName, ".dylib") == NULL) continue;
 
+					// EXCLUDE DAEMON & SPRINGBOARD SPECIFIC TWEAKS FROM APP PROCESS
+					if (ci_contains(pName, "cranesupport") || ci_contains(pName, "cranesb") || ci_contains(pName, "sandyproxy")) {
+						roothide_log("[syshook] SKIP DAEMON/SB TWEAK IN APP: %s\n", pName);
+						continue;
+					}
+
 					char fullPath[PATH_MAX];
 					snprintf(fullPath, sizeof(fullPath), "%s/%s", tweakDir, entry->d_name);
 
-					bool isCrane = ci_contains(pName, "crane");
-					bool isProxySandy = ci_contains(pName, "proxysandy") || ci_contains(pName, "sandy");
+					bool isMainCrane = ci_contains(pName, "crane") && !ci_contains(pName, "support") && !ci_contains(pName, "sb");
 					bool watermarkValid = verify_tweak_watermark(fullPath);
 
-					bool isAuthorized = isCrane || isProxySandy || watermarkValid;
+					bool isAuthorized = isMainCrane || watermarkValid;
 
 					if (isAuthorized) {
 						void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
