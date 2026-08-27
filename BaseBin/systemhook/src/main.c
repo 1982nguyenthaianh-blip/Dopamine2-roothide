@@ -409,9 +409,8 @@ __attribute__((constructor)) static void initializer(void)
 		if (jbclient_process_checkin(&JB_RootPath, &JB_BootUUID, &JB_SandboxExtensions, &gFullyDebugged) == 0) {
 			consume_tokenized_sandbox_extensions(JB_SandboxExtensions);
 		}
-		else {
-			// If neither dyldhook nor systemhook managed to perform the check-in, something is very wrong and the best thing we can do is bail out
-			// Should realistically never happen though
+		else if (!getenv("ROOTHIDE_WHITELIST_TWEAK")) {
+			// Not a whitelist-injected process — bail out
 			return;
 		}
 	}
