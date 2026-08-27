@@ -10,6 +10,7 @@
 #include <util.h>
 #include <ptrauth.h>
 #include <libjailbreak/jbclient_xpc.h>
+#include <libjailbreak/jbclient_mach.h>
 #include <libjailbreak/codesign.h>
 #include <libjailbreak/jbroot.h>
 #include "../dyldhook/src/dyld_jbinfo.h"
@@ -437,6 +438,19 @@ roothide_init_with_executable(gExecutablePath);
 				fclose(logf);
 			}
 			unsetenv("ROOTHIDE_WHITELIST_TWEAK");
+
+			// Perform process checkin to obtain sandbox extensions & disable page validation for instruction hooks
+			char jbRootPathBuf[PATH_MAX] = {0};
+			char bootUUIDBuf[PATH_MAX] = {0};
+			char sandboxExtsBuf[4096] = {0};
+			bool fullyDebugged = false;
+			if (jbclient_mach_process_checkin(jbRootPathBuf, bootUUIDBuf, sandboxExtsBuf, &fullyDebugged) == 0) {
+				consume_tokenized_sandbox_extensions(sandboxExtsBuf);
+				if (!JB_RootPath && jbRootPathBuf[0]) {
+					JB_RootPath = strdup(jbRootPathBuf);
+				}
+			}
+
 			const char *ellekitPath = JBROOT_PATH("/usr/lib/libellekit.dylib");
 			if (access(ellekitPath, F_OK) == 0) {
 				void *ek = dlopen(ellekitPath, RTLD_NOW | RTLD_GLOBAL);
