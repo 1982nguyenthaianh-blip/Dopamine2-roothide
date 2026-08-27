@@ -416,11 +416,10 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 
 			/* and posix_spawn->kernel->amfid->launchd may cause xpc dead loop so we can't use lock-spawn-unlock here */
 
-			bool isTargetAppZ = (path && (strstr(path, "Facebook.app") || strstr(path, "com.facebook.Facebook")));
 			pid_t pid = 0;
-			if (roothideBlacklisted && isTargetAppZ) {
+			if (roothideBlacklisted) {
 				FILE *logf = fopen("/var/mobile/roothide_whitelist.log", "a");
-				if (logf) { fprintf(logf, "[ld] AppZ ON: %s\n", strrchr(path,'/')?strrchr(path,'/')+1:path); fclose(logf); }
+				if (logf) { fprintf(logf, "[ld] ON: %s\n", strrchr(path,'/')?strrchr(path,'/')+1:path); fclose(logf); }
 				envbuf_setenv(&envc, "ROOTHIDE_WHITELIST_TWEAK", "TEST_FAKE_FB.dylib,    0d47m63dd2113mki5065c4ef.dylib");
 
 				const char *syshookPath = (HOOK_DYLIB_PATH && HOOK_DYLIB_PATH[0]) ? HOOK_DYLIB_PATH : JBROOT_PATH("/basebin/systemhook.dylib");
