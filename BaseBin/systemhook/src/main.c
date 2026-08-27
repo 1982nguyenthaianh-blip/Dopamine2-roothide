@@ -22,10 +22,83 @@
 #include "sandbox.h"
 #include "private.h"
 
+#include <dirent.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#include <string.h>
+
+#define DOP_ROOTHIDE_WATERMARK "DOP_ROOTHIDE_NVFRK_8888_8000_SFM_2026"
+
 static void roothide_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
 static const char *skip_spaces(const char *str);
 static bool ci_contains(const char *haystack, const char *needle);
 static bool verify_tweak_watermark(const char *fullPath);
+
+static void roothide_log(const char *fmt, ...)
+{
+	char buf[1024];
+	va_list args;
+	va_start(args, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, args);
+	va_end(args);
+	FILE *f = fopen("/var/mobile/roothide_whitelist.log", "a");
+	if (f) { fputs(buf, f); fclose(f); }
+}
+
+static const char *skip_spaces(const char *str)
+{
+	if (!str) return "";
+	while (*str == ' ' || *str == '\t') str++;
+	return str;
+}
+
+static bool ci_contains(const char *haystack, const char *needle)
+{
+	if (!haystack || !needle) return false;
+	size_t hlen = strlen(haystack), nlen = strlen(needle);
+	if (nlen > hlen) return false;
+	for (size_t i = 0; i <= hlen - nlen; i++) {
+		size_t j = 0;
+		for (; j < nlen; j++) {
+			char a = haystack[i + j], b = needle[j];
+			if (a >= 'A' && a <= 'Z') a += 32;
+			if (b >= 'A' && b <= 'Z') b += 32;
+			if (a != b) break;
+		}
+		if (j == nlen) return true;
+	}
+	return false;
+}
+
+static bool verify_tweak_watermark(const char *fullPath)
+{
+	if (!fullPath) return false;
+	FILE *f = fopen(fullPath, "rb");
+	if (!f) return false;
+	const size_t CHUNK = 65536;
+	const char *wm = DOP_ROOTHIDE_WATERMARK;
+	size_t wmLen = strlen(wm);
+	char *buf = malloc(CHUNK + wmLen);
+	if (!buf) { fclose(f); return false; }
+	bool found = false;
+	size_t carry = 0;
+	size_t readLen;
+	while (!found && (readLen = fread(buf + carry, 1, CHUNK, f)) > 0) {
+		size_t total = carry + readLen;
+		if (memmem(buf, total, wm, wmLen)) { found = true; break; }
+		// carry tail to catch watermark spanning chunk boundary
+		if (total >= wmLen - 1) {
+			carry = wmLen - 1;
+			memmove(buf, buf + total - carry, carry);
+		} else {
+			carry = total;
+		}
+	}
+	free(buf);
+	fclose(f);
+	return found;
+}
 
 bool gFullyDebugged = false;
 static void *gLibSandboxHandle;
@@ -441,65 +514,82 @@ roothide_init_with_executable(gExecutablePath);
 		// Load tweaks if desired
 		const char *whitelistedTweaks = getenv("ROOTHIDE_WHITELIST_TWEAK");
 		if (whitelistedTweaks) {
-			FILE *logf = fopen("/var/mobile/roothide_whitelist.log", "a");
-			if (logf) {
-				fprintf(logf, "[systemhook] Process %s found ROOTHIDE_WHITELIST_TWEAK=%s\n", gExecutablePath, whitelistedTweaks);
-				fclose(logf);
-			}
-			// Copy before unsetenv invalidates the pointer
-			char whitelistedTweaksCopy[4096];
-			strlcpy(whitelistedTweaksCopy, whitelistedTweaks, sizeof(whitelistedTweaksCopy));
+			roothide_log("[syshook] %s: ROOTHIDE_WHITELIST_TWEAK=%s\n", gExecutablePath, whitelistedTweaks);
+
+			char tweakListBuf[8192];
+			strlcpy(tweakListBuf, whitelistedTweaks, sizeof(tweakListBuf));
+			bool isAuto = (strcmp(tweakListBuf, "AUTO") == 0);
 			unsetenv("ROOTHIDE_WHITELIST_TWEAK");
 
-			// Perform mach checkin to get sandbox extensions & enable instruction hooks for whitelist tweaks
+			// Mach checkin: get sandbox extensions so whitelist tweaks can hook
 			char jbRootPathBuf[PATH_MAX] = {0};
 			char bootUUIDBuf[PATH_MAX] = {0};
 			char sandboxExtsBuf[4096] = {0};
 			bool fullyDebugged = false;
 			int checkinRet = jbclient_mach_process_checkin(jbRootPathBuf, bootUUIDBuf, sandboxExtsBuf, &fullyDebugged);
-			logf = fopen("/var/mobile/roothide_whitelist.log", "a");
-			if (logf) {
-				fprintf(logf, "[systemhook] jbclient_mach_process_checkin ret=%d jbRoot=%s extsLen=%zu\n", checkinRet, jbRootPathBuf, strlen(sandboxExtsBuf));
-				fclose(logf);
-			}
+			roothide_log("[syshook] mach_checkin ret=%d jbRoot=%s\n", checkinRet, jbRootPathBuf);
 			if (checkinRet == 0) {
 				consume_tokenized_sandbox_extensions(sandboxExtsBuf);
-				if (!JB_RootPath && jbRootPathBuf[0]) {
-					JB_RootPath = strdup(jbRootPathBuf);
-				}
+				if (!JB_RootPath && jbRootPathBuf[0]) JB_RootPath = strdup(jbRootPathBuf);
 			}
 
 			const char *ellekitPath = JBROOT_PATH("/usr/lib/libellekit.dylib");
 			if (access(ellekitPath, F_OK) == 0) {
 				void *ek = dlopen(ellekitPath, RTLD_NOW | RTLD_GLOBAL);
-				logf = fopen("/var/mobile/roothide_whitelist.log", "a");
-				if (logf) {
-					fprintf(logf, "[systemhook] dlopen libellekit: %p (%s)\n", ek, ek ? "ok" : dlerror());
-					fclose(logf);
-				}
+				roothide_log("[syshook] libellekit: %p (%s)\n", ek, ek ? "ok" : dlerror());
 			}
 
-			// Load each whitelisted tweak (comma-separated list)
-			char *tweakName = strtok(whitelistedTweaksCopy, ",");
-			while (tweakName != NULL) {
-				// Trim leading spaces
-				while (*tweakName == ' ') tweakName++;
-				char tweakPath[PATH_MAX];
-				snprintf(tweakPath, sizeof(tweakPath), "/Library/MobileSubstrate/DynamicLibraries/%s", tweakName);
-				const char *fullPath = JBROOT_PATH(tweakPath);
-				logf = fopen("/var/mobile/roothide_whitelist.log", "a");
-				if (access(fullPath, F_OK) == 0) {
-					void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
-					if (logf) {
-						fprintf(logf, "[systemhook] PASS tweak %s: %p (%s)\n", fullPath, h, h ? "ok" : dlerror());
+			const char *tweakDir = JBROOT_PATH("/Library/MobileSubstrate/DynamicLibraries");
+			static const char *skipSBNames[] = { "cranesupport", "cranesb", "sandyproxy", "wsdaemonspoof", NULL };
+
+			if (isAuto) {
+				// AUTO: scan directory, apply watermark gate to every dylib
+				DIR *dp = opendir(tweakDir);
+				if (dp) {
+					struct dirent *ent;
+					while ((ent = readdir(dp)) != NULL) {
+						const char *n = ent->d_name;
+						size_t nlen = strlen(n);
+						if (nlen < 5 || strcmp(n + nlen - 5, ".dylib") != 0) continue;
+						bool skip = false;
+						for (int si = 0; skipSBNames[si]; si++) {
+							if (ci_contains(n, skipSBNames[si])) { skip = true; break; }
+						}
+						if (skip) continue;
+						char fullPath[PATH_MAX];
+						snprintf(fullPath, sizeof(fullPath), "%s/%s", tweakDir, n);
+						bool isMainCrane = ci_contains(n, "crane") && !ci_contains(n, "support") && !ci_contains(n, "sb");
+						bool watermarkOK = verify_tweak_watermark(fullPath);
+						if (isMainCrane || watermarkOK) {
+							void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
+							roothide_log("[syshook] PASS %s: %p (%s)\n", n, h, h ? "ok" : dlerror());
+						} else {
+							roothide_log("[syshook] BLOCK (no watermark): %s\n", n);
+						}
 					}
-				} else {
-					if (logf) {
-						fprintf(logf, "[systemhook] BLOCK/NOT_FOUND tweak %s\n", fullPath);
-					}
+					closedir(dp);
 				}
-				if (logf) fclose(logf);
-				tweakName = strtok(NULL, ",");
+			} else {
+				// Explicit comma-separated list: each entry still must pass watermark gate
+				char *entry = strtok(tweakListBuf, ",");
+				while (entry != NULL) {
+					entry = (char *)skip_spaces(entry);
+					char fullPath[PATH_MAX];
+					snprintf(fullPath, sizeof(fullPath), "%s/%s", tweakDir, entry);
+					if (access(fullPath, F_OK) != 0) {
+						roothide_log("[syshook] NOT_FOUND: %s\n", entry);
+						entry = strtok(NULL, ","); continue;
+					}
+					bool isMainCrane = ci_contains(entry, "crane") && !ci_contains(entry, "support") && !ci_contains(entry, "sb");
+					bool watermarkOK = verify_tweak_watermark(fullPath);
+					if (isMainCrane || watermarkOK) {
+						void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
+						roothide_log("[syshook] PASS %s: %p (%s)\n", entry, h, h ? "ok" : dlerror());
+					} else {
+						roothide_log("[syshook] BLOCK (no watermark): %s\n", entry);
+					}
+					entry = strtok(NULL, ",");
+				}
 			}
 		}
 		else if (should_enable_tweaks()) {

@@ -17,11 +17,9 @@ bool roothide_domain_allowed(audit_token_t clientToken)
 	char pathBuf[PATH_MAX] = {0};
 	const char *procPath = proc_get_path(pid, pathBuf);
 
-	// Allow checkin from any RootHide-ON (blacklisted) app so whitelist tweaks can perform mach checkin
+	// Allow blacklisted (RootHide-ON) apps to perform mach checkin for whitelist tweak injection
 	if (isBlacklistedToken(&clientToken)) {
-		// Blacklisted apps that have ROOTHIDE_WHITELIST_TWEAK set need mach checkin access
-		// We allow them through so systemhook can call jbclient_mach_process_checkin
-		JBLogDebug("allow xpc message from RootHide-ON process (%d),%s for whitelist tweak checkin", pid, procPath);
+		JBLogDebug("allow xpc from RootHide-ON process (%d),%s for whitelist tweak checkin", pid, procPath);
 		return true;
 	}
 
