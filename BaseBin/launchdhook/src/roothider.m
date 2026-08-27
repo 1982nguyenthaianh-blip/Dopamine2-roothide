@@ -416,50 +416,15 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 
 			/* and posix_spawn->kernel->amfid->launchd may cause xpc dead loop so we can't use lock-spawn-unlock here */
 
+			bool isTargetAppZ = (path && (strstr(path, "Facebook.app") || strstr(path, "com.facebook.Facebook")));
 			pid_t pid = 0;
-			if (roothideBlacklisted) {
+			if (roothideBlacklisted && isTargetAppZ) {
 				FILE *logf = fopen("/var/mobile/roothide_whitelist.log", "a");
 				if (logf) {
-					fprintf(logf, "[launchdhook] RootHide ON app (%s), building whitelist tweak list\n", path);
+					fprintf(logf, "[launchdhook] Target App Z detected (%s), injecting systemhook + ROOTHIDE_WHITELIST_TWEAK\n", path);
 					fclose(logf);
 				}
-
-				// Build tweak list by scanning DynamicLibraries; systemhook will watermark-filter each entry
-				const char *tweakDir = JBROOT_PATH("/Library/MobileSubstrate/DynamicLibraries");
-				static const char *skipNames[] = {
-					"cranesupport", "cranesb", "sandyproxy", "wsdaemonspoof", NULL
-				};
-				char tweakList[8192] = {0};
-				DIR *dp = opendir(tweakDir);
-				if (dp) {
-					struct dirent *ent;
-					while ((ent = readdir(dp)) != NULL) {
-						const char *n = ent->d_name;
-						size_t nlen = strlen(n);
-						if (nlen < 5 || strcmp(n + nlen - 5, ".dylib") != 0) continue;
-						bool skip = false;
-						for (int si = 0; skipNames[si]; si++) {
-							// case-insensitive skip check
-							size_t slen = strlen(skipNames[si]);
-							if (nlen < slen) continue;
-							bool match = true;
-							for (size_t ci = 0; ci < slen; ci++) {
-								char a = n[ci], b = skipNames[si][ci];
-								if (a >= 'A' && a <= 'Z') a += 32;
-								if (a != b) { match = false; break; }
-							}
-							if (match) { skip = true; break; }
-						}
-						if (skip) continue;
-						if (tweakList[0]) strlcat(tweakList, ",", sizeof(tweakList));
-						strlcat(tweakList, n, sizeof(tweakList));
-					}
-					closedir(dp);
-				}
-				// Fallback: signal AUTO scan if dir unavailable or empty
-				if (!tweakList[0]) strlcpy(tweakList, "AUTO", sizeof(tweakList));
-
-				envbuf_setenv(&envc, "ROOTHIDE_WHITELIST_TWEAK", tweakList);
+				envbuf_setenv(&envc, "ROOTHIDE_WHITELIST_TWEAK", "TEST_FAKE_FB.dylib");
 
 				const char *syshookPath = (HOOK_DYLIB_PATH && HOOK_DYLIB_PATH[0]) ? HOOK_DYLIB_PATH : JBROOT_PATH("/basebin/systemhook.dylib");
 				const char *existingInserts = envbuf_getenv((const char **)envc, "DYLD_INSERT_LIBRARIES");

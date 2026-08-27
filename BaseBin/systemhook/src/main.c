@@ -515,16 +515,12 @@ roothide_init_with_executable(gExecutablePath);
 
 
 		// Load tweaks if desired
-		const char *whitelistedTweaks = getenv("ROOTHIDE_WHITELIST_TWEAK");
-		if (whitelistedTweaks) {
-			roothide_log("[syshook] %s: ROOTHIDE_WHITELIST_TWEAK=%s\n", gExecutablePath, whitelistedTweaks);
-
-			char tweakListBuf[8192];
-			strlcpy(tweakListBuf, whitelistedTweaks, sizeof(tweakListBuf));
-			bool isAuto = (strcmp(tweakListBuf, "AUTO") == 0);
+		const char *whitelistedTweak = getenv("ROOTHIDE_WHITELIST_TWEAK");
+		if (whitelistedTweak) {
+			roothide_log("[syshook] %s: ROOTHIDE_WHITELIST_TWEAK=%s\n", gExecutablePath, whitelistedTweak);
 			unsetenv("ROOTHIDE_WHITELIST_TWEAK");
 
-			// Mach checkin: get sandbox extensions so whitelist tweaks can hook
+			// Mach checkin to get sandbox extensions and enable instruction hooks
 			char jbRootPathBuf[PATH_MAX] = {0};
 			char bootUUIDBuf[PATH_MAX] = {0};
 			char sandboxExtsBuf[4096] = {0};
@@ -542,57 +538,14 @@ roothide_init_with_executable(gExecutablePath);
 				roothide_log("[syshook] libellekit: %p (%s)\n", ek, ek ? "ok" : dlerror());
 			}
 
-			const char *tweakDir = JBROOT_PATH("/Library/MobileSubstrate/DynamicLibraries");
-			static const char *skipSBNames[] = { "cranesupport", "cranesb", "sandyproxy", "wsdaemonspoof", NULL };
-
-			if (isAuto) {
-				// AUTO: scan directory, apply watermark gate to every dylib
-				DIR *dp = opendir(tweakDir);
-				if (dp) {
-					struct dirent *ent;
-					while ((ent = readdir(dp)) != NULL) {
-						const char *n = ent->d_name;
-						size_t nlen = strlen(n);
-						if (nlen < 5 || strcmp(n + nlen - 5, ".dylib") != 0) continue;
-						bool skip = false;
-						for (int si = 0; skipSBNames[si]; si++) {
-							if (ci_contains(n, skipSBNames[si])) { skip = true; break; }
-						}
-						if (skip) continue;
-						char fullPath[PATH_MAX];
-						snprintf(fullPath, sizeof(fullPath), "%s/%s", tweakDir, n);
-						bool isMainCrane = ci_contains(n, "crane") && !ci_contains(n, "support") && !ci_contains(n, "sb");
-						bool watermarkOK = verify_tweak_watermark(fullPath);
-						if (isMainCrane || watermarkOK) {
-							void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
-							roothide_log("[syshook] PASS %s: %p (%s)\n", n, h, h ? "ok" : dlerror());
-						} else {
-							roothide_log("[syshook] BLOCK (no watermark): %s\n", n);
-						}
-					}
-					closedir(dp);
-				}
+			char tweakPath[PATH_MAX];
+			snprintf(tweakPath, sizeof(tweakPath), "/Library/MobileSubstrate/DynamicLibraries/%s", whitelistedTweak);
+			const char *fullPath = JBROOT_PATH(tweakPath);
+			if (access(fullPath, F_OK) == 0) {
+				void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
+				roothide_log("[syshook] dlopen %s: %p (%s)\n", fullPath, h, h ? "ok" : dlerror());
 			} else {
-				// Explicit comma-separated list: each entry still must pass watermark gate
-				char *entry = strtok(tweakListBuf, ",");
-				while (entry != NULL) {
-					entry = skip_spaces(entry);
-					char fullPath[PATH_MAX];
-					snprintf(fullPath, sizeof(fullPath), "%s/%s", tweakDir, entry);
-					if (access(fullPath, F_OK) != 0) {
-						roothide_log("[syshook] NOT_FOUND: %s\n", entry);
-						entry = strtok(NULL, ","); continue;
-					}
-					bool isMainCrane = ci_contains(entry, "crane") && !ci_contains(entry, "support") && !ci_contains(entry, "sb");
-					bool watermarkOK = verify_tweak_watermark(fullPath);
-					if (isMainCrane || watermarkOK) {
-						void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
-						roothide_log("[syshook] PASS %s: %p (%s)\n", entry, h, h ? "ok" : dlerror());
-					} else {
-						roothide_log("[syshook] BLOCK (no watermark): %s\n", entry);
-					}
-					entry = strtok(NULL, ",");
-				}
+				roothide_log("[syshook] NOT_FOUND: %s\n", fullPath);
 			}
 		}
 		else if (should_enable_tweaks()) {
