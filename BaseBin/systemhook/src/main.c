@@ -4,6 +4,11 @@
 #include <mach-o/dyld.h>
 #include <mach-o/dyld_images.h>
 #include <mach-o/getsect.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#include <stdarg.h>
 #include <dlfcn.h>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -306,6 +311,9 @@ int parse_dyldhook_jbinfo(char **jbRootPathOut, char **bootUUIDOut, char **sandb
 	if (bootUUIDOut)          *bootUUIDOut          = jbInfo->bootUUID;
 	if (sandboxExtensionsOut) *sandboxExtensionsOut = jbInfo->sandboxExtensions;
 	if (fullyDebuggedOut)     *fullyDebuggedOut     = jbInfo->fullyDebugged;
+
+	return 0;
+}
 
 #define DOP_ROOTHIDE_WATERMARK "DOP_ROOTHIDE_NVFRK_8888_8000_SFM_2026"
 

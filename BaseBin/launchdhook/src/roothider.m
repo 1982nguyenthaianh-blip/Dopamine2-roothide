@@ -3,7 +3,10 @@
 #include <spawn.h>
 #include <substrate.h>
 #include <sys/sysctl.h>
+#include <sys/types.h>
 #include <dirent.h>
+#include <string.h>
+#include <strings.h>
 
 #include <libjailbreak/libjailbreak.h>
 #include <libjailbreak/roothider.h>
