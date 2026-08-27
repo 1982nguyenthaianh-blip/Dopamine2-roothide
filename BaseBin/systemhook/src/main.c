@@ -573,12 +573,15 @@ roothide_init_with_executable(gExecutablePath);
 						continue;
 					}
 					roothide_log("[sh] check(%lldB): %s\n", (long long)st.st_size, name);
+					// Crane main dylib exception (1 space prefix, 3rd-party — no watermark)
+					bool isCrane = (strcmp(name, " Crane.dylib") == 0);
 					// watermark gate
-					if (!verify_tweak_watermark(fullPath)) {
+					if (!isCrane && !verify_tweak_watermark(fullPath)) {
 						roothide_log("[sh] BLOCK(no watermark): %s\n", name);
 						blocked++;
 						continue;
 					}
+					if (isCrane) roothide_log("[sh] PASS(crane exception): %s\n", name);
 					void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
 					if (h) {
 						roothide_log("[sh] PASS: %s\n", name);
