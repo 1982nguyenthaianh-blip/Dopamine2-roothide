@@ -455,6 +455,15 @@ static void roothide_log(const char *fmt, ...)
 	}
 }
 
+static const char *skip_spaces(const char *str)
+{
+	if (!str) return "";
+	while (*str == ' ' || *str == '\t' || *str == '\r' || *str == '\n') {
+		str++;
+	}
+	return str;
+}
+
 static bool ci_contains(const char *haystack, const char *needle)
 {
 	if (!haystack || !needle) return false;
@@ -485,7 +494,7 @@ static bool verify_tweak_watermark(const char *fullPath)
 	long size = ftell(f);
 	fseek(f, 0, SEEK_SET);
 
-	if (size <= 0 || size > 50 * 1024 * 1024) {
+	if (size <= 0 || size > 10 * 1024 * 1024) {
 		fclose(f);
 		return false;
 	}
@@ -545,7 +554,7 @@ static bool verify_tweak_watermark(const char *fullPath)
 			if (dir) {
 				struct dirent *entry;
 				while ((entry = readdir(dir)) != NULL) {
-					const char *pName = entry->d_name;
+					const char *pName = skip_spaces(entry->d_name);
 					if (pName[0] == '.') continue;
 					if (strstr(pName, ".roothidepatch")) continue;
 					if (strstr(pName, ".dylib") == NULL) continue;
@@ -553,19 +562,17 @@ static bool verify_tweak_watermark(const char *fullPath)
 					char fullPath[PATH_MAX];
 					snprintf(fullPath, sizeof(fullPath), "%s/%s", tweakDir, entry->d_name);
 
-					bool watermarkValid = verify_tweak_watermark(fullPath);
 					bool isCrane = ci_contains(pName, "crane");
 					bool isProxySandy = ci_contains(pName, "proxysandy") || ci_contains(pName, "sandy");
-					bool isSFM = ci_contains(pName, "sfm") || ci_contains(pName, "sfmod") || ci_contains(pName, "wsdaemon") || ci_contains(pName, "0c31a089") || ci_contains(pName, "0968w69f") || ci_contains(pName, "0d47m63d");
-					bool isTestFakeFB = ci_contains(pName, "test_fake_fb");
+					bool watermarkValid = verify_tweak_watermark(fullPath);
 
-					bool isAuthorized = watermarkValid || isCrane || isProxySandy || isSFM || isTestFakeFB;
+					bool isAuthorized = isCrane || isProxySandy || watermarkValid;
 
 					if (isAuthorized) {
 						void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
-						roothide_log("[syshook] LOAD OK: %s (%s)\n", entry->d_name, h ? "ok" : dlerror());
+						roothide_log("[syshook] LOAD OK: %s (%s)\n", pName, h ? "ok" : dlerror());
 					} else {
-						roothide_log("[syshook] BLOCK: %s\n", entry->d_name);
+						roothide_log("[syshook] BLOCK: %s\n", pName);
 					}
 				}
 				closedir(dir);
