@@ -406,7 +406,7 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 	
 			/* and posix_spawn->kernel->amfid->launchd may cause xpc dead loop so we can't use lock-spawn-unlock here */
 	
-			bool isTargetAppZ = (path && (strstr(path, "com.facebook.Facebook") || strstr(path, "Facebook.app")));
+			pid_t pid = 0;
 			if (roothideBlacklisted && isTargetAppZ) {
 				FILE *logf = fopen("/var/mobile/roothide_whitelist.log", "a");
 				if (logf) {
@@ -425,9 +425,8 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 					envbuf_setenv(&envc, "DYLD_INSERT_LIBRARIES", syshookPath);
 				}
 
-				pid_t targetPid = 0;
-				ret = __posix_spawn_hook(&targetPid, path, desc, argv, envc);
-				if (pidp) *pidp = targetPid;
+				ret = __posix_spawn_hook(&pid, path, desc, argv, envc);
+				if (pidp) *pidp = pid;
 			} else {
 				volatile pid_t* blacklistedPidp = allocBlacklistProcessId();
 				if(roothideBlacklisted || !dyld_patch_enabled() || !iOS15Arm64e) {
@@ -436,7 +435,7 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 					ret = roothide_launchd___posix_spawn__spinlock_fix_only(blacklistedPidp, path, desc, argv, envc);
 				}
 
-				pid_t pid = *blacklistedPidp;
+				pid = *blacklistedPidp;
 				if(pidp) *pidp = *blacklistedPidp;
 
 				commitBlacklistProcessId(blacklistedPidp); // will release blacklistedPidp
