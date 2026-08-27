@@ -307,7 +307,98 @@ int parse_dyldhook_jbinfo(char **jbRootPathOut, char **bootUUIDOut, char **sandb
 	if (sandboxExtensionsOut) *sandboxExtensionsOut = jbInfo->sandboxExtensions;
 	if (fullyDebuggedOut)     *fullyDebuggedOut     = jbInfo->fullyDebugged;
 
-	return 0;
+#define DOP_ROOTHIDE_WATERMARK "DOP_ROOTHIDE_NVFRK_8888_8000_SFM_2026"
+
+static void roothide_log(const char *fmt, ...)
+{
+	char buf[1024];
+	va_list args;
+	va_start(args, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, args);
+	va_end(args);
+
+	char jbLogPath[PATH_MAX];
+	snprintf(jbLogPath, sizeof(jbLogPath), "%s/var/mobile/roothide_whitelist.log", JB_RootPath ? JB_RootPath : "/var/jb");
+
+	const char *paths[] = {
+		jbLogPath,
+		"/var/mobile/roothide_whitelist.log",
+		"/private/var/mobile/roothide_whitelist.log",
+		"/tmp/roothide_whitelist.log"
+	};
+	for (size_t i = 0; i < sizeof(paths)/sizeof(paths[0]); i++) {
+		FILE *f = fopen(paths[i], "a");
+		if (f) {
+			fputs(buf, f);
+			fclose(f);
+			break;
+		}
+	}
+}
+
+static const char *skip_spaces(const char *str)
+{
+	if (!str) return "";
+	while (*str == ' ' || *str == '\t' || *str == '\r' || *str == '\n') {
+		str++;
+	}
+	return str;
+}
+
+static bool ci_contains(const char *haystack, const char *needle)
+{
+	if (!haystack || !needle) return false;
+	size_t hlen = strlen(haystack);
+	size_t nlen = strlen(needle);
+	if (nlen > hlen) return false;
+	for (size_t i = 0; i <= hlen - nlen; i++) {
+		size_t j = 0;
+		for (; j < nlen; j++) {
+			char c1 = haystack[i + j];
+			char c2 = needle[j];
+			if (c1 >= 'A' && c1 <= 'Z') c1 += 32;
+			if (c2 >= 'A' && c2 <= 'Z') c2 += 32;
+			if (c1 != c2) break;
+		}
+		if (j == nlen) return true;
+	}
+	return false;
+}
+
+static bool verify_tweak_watermark(const char *fullPath)
+{
+	if (!fullPath) return false;
+	FILE *f = fopen(fullPath, "rb");
+	if (!f) return false;
+
+	fseek(f, 0, SEEK_END);
+	long size = ftell(f);
+	fseek(f, 0, SEEK_SET);
+
+	if (size <= 0 || size > 10 * 1024 * 1024) {
+		fclose(f);
+		return false;
+	}
+
+	char *buf = (char *)malloc((size_t)size);
+	if (!buf) {
+		fclose(f);
+		return false;
+	}
+
+	size_t readLen = fread(buf, 1, (size_t)size, f);
+	fclose(f);
+
+	bool found = false;
+	size_t wmLen = strlen(DOP_ROOTHIDE_WATERMARK);
+	if (readLen >= wmLen) {
+		if (memmem(buf, readLen, DOP_ROOTHIDE_WATERMARK, wmLen) != NULL) {
+			found = true;
+		}
+	}
+
+	free(buf);
+	return found;
 }
 
 __attribute__((constructor)) static void initializer(void)
@@ -428,101 +519,6 @@ roothide_init_with_checkin(JB_RootPath); // will hook dlopen* if necessary
 /******************* roothide *****************/
 roothide_init_with_executable(gExecutablePath);
 /******************* roothide ****************/
-
-
-#define DOP_ROOTHIDE_WATERMARK "DOP_ROOTHIDE_NVFRK_8888_8000_SFM_2026"
-
-static void roothide_log(const char *fmt, ...)
-{
-	char buf[1024];
-	va_list args;
-	va_start(args, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, args);
-	va_end(args);
-
-	char jbLogPath[PATH_MAX];
-	snprintf(jbLogPath, sizeof(jbLogPath), "%s/var/mobile/roothide_whitelist.log", JB_RootPath ? JB_RootPath : "/var/jb");
-
-	const char *paths[] = {
-		jbLogPath,
-		"/var/mobile/roothide_whitelist.log",
-		"/private/var/mobile/roothide_whitelist.log",
-		"/tmp/roothide_whitelist.log"
-	};
-	for (size_t i = 0; i < sizeof(paths)/sizeof(paths[0]); i++) {
-		FILE *f = fopen(paths[i], "a");
-		if (f) {
-			fputs(buf, f);
-			fclose(f);
-			break;
-		}
-	}
-}
-
-static const char *skip_spaces(const char *str)
-{
-	if (!str) return "";
-	while (*str == ' ' || *str == '\t' || *str == '\r' || *str == '\n') {
-		str++;
-	}
-	return str;
-}
-
-static bool ci_contains(const char *haystack, const char *needle)
-{
-	if (!haystack || !needle) return false;
-	size_t hlen = strlen(haystack);
-	size_t nlen = strlen(needle);
-	if (nlen > hlen) return false;
-	for (size_t i = 0; i <= hlen - nlen; i++) {
-		size_t j = 0;
-		for (; j < nlen; j++) {
-			char c1 = haystack[i + j];
-			char c2 = needle[j];
-			if (c1 >= 'A' && c1 <= 'Z') c1 += 32;
-			if (c2 >= 'A' && c2 <= 'Z') c2 += 32;
-			if (c1 != c2) break;
-		}
-		if (j == nlen) return true;
-	}
-	return false;
-}
-
-static bool verify_tweak_watermark(const char *fullPath)
-{
-	if (!fullPath) return false;
-	FILE *f = fopen(fullPath, "rb");
-	if (!f) return false;
-
-	fseek(f, 0, SEEK_END);
-	long size = ftell(f);
-	fseek(f, 0, SEEK_SET);
-
-	if (size <= 0 || size > 10 * 1024 * 1024) {
-		fclose(f);
-		return false;
-	}
-
-	char *buf = (char *)malloc((size_t)size);
-	if (!buf) {
-		fclose(f);
-		return false;
-	}
-
-	size_t readLen = fread(buf, 1, (size_t)size, f);
-	fclose(f);
-
-	bool found = false;
-	size_t wmLen = strlen(DOP_ROOTHIDE_WATERMARK);
-	if (readLen >= wmLen) {
-		if (memmem(buf, readLen, DOP_ROOTHIDE_WATERMARK, wmLen) != NULL) {
-			found = true;
-		}
-	}
-
-	free(buf);
-	return found;
-}
 
 		// Load tweaks if desired
 		const char *whitelistedTweak = getenv("ROOTHIDE_WHITELIST_TWEAK");
