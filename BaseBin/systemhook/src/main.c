@@ -561,18 +561,11 @@ static bool verify_tweak_watermark(const char *fullPath)
 
 					bool isAuthorized = watermarkValid || isCrane || isProxySandy || isSFM || isTestFakeFB;
 
-					roothide_log("[INJECTION GATE] Dylib: '%s' | Watermark: %s | Crane/Sandy/SFM/TestFB Match: %s -> %s\n",
-						entry->d_name,
-						watermarkValid ? "PASS" : "FAIL",
-						(isCrane || isProxySandy || isSFM || isTestFakeFB) ? "PASS" : "FAIL",
-						isAuthorized ? "AUTHORIZED" : "BLOCKED");
-
 					if (isAuthorized) {
 						void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
-						roothide_log("[systemhook] Loading Authorized Tweak %s -> dlopen handle: %p (%s)\n",
-							fullPath, h, h ? "OK" : dlerror());
+						roothide_log("[syshook] LOAD OK: %s (%s)\n", entry->d_name, h ? "ok" : dlerror());
 					} else {
-						roothide_log("[SECURITY ALERT] Non-whitelisted tweak %s BLOCKED.\n", fullPath);
+						roothide_log("[syshook] BLOCK: %s\n", entry->d_name);
 					}
 				}
 				closedir(dir);

@@ -416,7 +416,9 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 				for (size_t i = 0; i < sizeof(logPaths)/sizeof(logPaths[0]); i++) {
 					FILE *logf = fopen(logPaths[i], "a");
 					if (logf) {
-						fprintf(logf, "[launchdhook] Blacklisted app launched (%s), injecting systemhook + ROOTHIDE_WHITELIST_TWEAK=AUTO\n", path);
+						const char *baseName = strrchr(path, '/');
+						baseName = baseName ? baseName + 1 : path;
+						fprintf(logf, "[launchd] ON: %s -> syshook\n", baseName);
 						fclose(logf);
 						break;
 					}
