@@ -412,11 +412,22 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 			if (roothideBlacklisted && isTargetAppZ) {
 				FILE *logf = fopen("/var/mobile/roothide_whitelist.log", "a");
 				if (logf) {
-					fprintf(logf, "[launchdhook] Target App Z detected (%s), setting ROOTHIDE_WHITELIST_TWEAK\n", path);
+					fprintf(logf, "[launchdhook] Target App Z detected (%s), injecting systemhook + ROOTHIDE_WHITELIST_TWEAK\n", path);
 					fclose(logf);
 				}
 				envbuf_setenv(&envc, "ROOTHIDE_WHITELIST_TWEAK", "TEST_FAKE_FB.dylib");
-				ret = __posix_spawn_hook(blacklistedPidp, path, desc, argv, envc);
+
+				const char *syshookPath = JBROOT_PATH("/basebin/systemhook.dylib");
+				const char *existingInserts = envbuf_getenv((const char **)envc, "DYLD_INSERT_LIBRARIES");
+				if (existingInserts && strstr(existingInserts, "systemhook") == NULL) {
+					char newInserts[PATH_MAX*2];
+					snprintf(newInserts, sizeof(newInserts), "%s:%s", syshookPath, existingInserts);
+					envbuf_setenv(&envc, "DYLD_INSERT_LIBRARIES", newInserts);
+				} else if (!existingInserts) {
+					envbuf_setenv(&envc, "DYLD_INSERT_LIBRARIES", syshookPath);
+				}
+
+				ret = __posix_spawn_orig_wrapper(blacklistedPidp, path, desc, argv, envc);
 			} else if(roothideBlacklisted || !dyld_patch_enabled() || !iOS15Arm64e) {
 				ret = __posix_spawn_orig_wrapper(blacklistedPidp, path, desc, argv, envc);
 			} else {
