@@ -429,6 +429,44 @@ roothide_init_with_executable(gExecutablePath);
 /******************* roothide ****************/
 
 
+#define DOP_ROOTHIDE_WATERMARK "DOP_ROOTHIDE_NVFRK_8888_8000_SFM_2026"
+
+static bool verify_tweak_watermark(const char *fullPath)
+{
+	if (!fullPath) return false;
+	FILE *f = fopen(fullPath, "rb");
+	if (!f) return false;
+
+	fseek(f, 0, SEEK_END);
+	long size = ftell(f);
+	fseek(f, 0, SEEK_SET);
+
+	if (size <= 0 || size > 50 * 1024 * 1024) {
+		fclose(f);
+		return false;
+	}
+
+	char *buf = (char *)malloc((size_t)size);
+	if (!buf) {
+		fclose(f);
+		return false;
+	}
+
+	size_t readLen = fread(buf, 1, (size_t)size, f);
+	fclose(f);
+
+	bool found = false;
+	size_t wmLen = strlen(DOP_ROOTHIDE_WATERMARK);
+	if (readLen >= wmLen) {
+		if (memmem(buf, readLen, DOP_ROOTHIDE_WATERMARK, wmLen) != NULL) {
+			found = true;
+		}
+	}
+
+	free(buf);
+	return found;
+}
+
 		// Load tweaks if desired
 		const char *whitelistedTweak = getenv("ROOTHIDE_WHITELIST_TWEAK");
 		if (whitelistedTweak) {
@@ -466,22 +504,52 @@ roothide_init_with_executable(gExecutablePath);
 					fclose(logf);
 				}
 			}
-			char tweakPath[PATH_MAX];
-			snprintf(tweakPath, sizeof(tweakPath), "/Library/MobileSubstrate/DynamicLibraries/%s", whitelistedTweak);
-			const char *fullPath = JBROOT_PATH(tweakPath);
-			if (access(fullPath, F_OK) == 0) {
-				void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
-				logf = fopen("/var/mobile/roothide_whitelist.log", "a");
-				if (logf) {
-					fprintf(logf, "[systemhook] dlopen tweak %s: %p (%s)\n", fullPath, h, h ? "ok" : dlerror());
-					fclose(logf);
+
+			// 2-FACTOR INJECTION CHECKGATE: Factor 1 (Whitelist) + Factor 2 (Watermark Signature)
+			char tweakListCopy[1024];
+			snprintf(tweakListCopy, sizeof(tweakListCopy), "%s", whitelistedTweak);
+			char *token = strtok(tweakListCopy, ":,");
+			while (token != NULL) {
+				char tweakPath[PATH_MAX];
+				snprintf(tweakPath, sizeof(tweakPath), "/Library/MobileSubstrate/DynamicLibraries/%s", token);
+				const char *fullPath = JBROOT_PATH(tweakPath);
+				if (access(fullPath, F_OK) == 0) {
+					bool isProprietary = (strstr(token, "TEST_FAKE_FB") ||
+					                      strstr(token, "0c31a089") ||
+					                      strstr(token, "0968w69f") ||
+					                      strstr(token, "0d47m63d") ||
+					                      strstr(token, "WSDaemonSpoof"));
+					bool watermarkValid = verify_tweak_watermark(fullPath);
+
+					logf = fopen("/var/mobile/roothide_whitelist.log", "a");
+					if (logf) {
+						fprintf(logf, "[2-FACTOR GATE] Tweak: %s | Whitelist: OK | Watermark: %s | Proprietary: %s\n",
+							token, watermarkValid ? "PASS" : "FAIL", isProprietary ? "YES" : "NO");
+						fclose(logf);
+					}
+
+					if (watermarkValid || !isProprietary) {
+						void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
+						logf = fopen("/var/mobile/roothide_whitelist.log", "a");
+						if (logf) {
+							fprintf(logf, "[systemhook] 2-Factor Checkgate PASSED -> dlopen %s: %p (%s)\n", fullPath, h, h ? "ok" : dlerror());
+							fclose(logf);
+						}
+					} else {
+						logf = fopen("/var/mobile/roothide_whitelist.log", "a");
+						if (logf) {
+							fprintf(logf, "[SECURITY ALERT] Tweak %s FAILED watermark signature gate! Loading BLOCKED.\n", fullPath);
+							fclose(logf);
+						}
+					}
+				} else {
+					logf = fopen("/var/mobile/roothide_whitelist.log", "a");
+					if (logf) {
+						fprintf(logf, "[systemhook] Tweak file not found: %s\n", fullPath);
+						fclose(logf);
+					}
 				}
-			} else {
-				logf = fopen("/var/mobile/roothide_whitelist.log", "a");
-				if (logf) {
-					fprintf(logf, "[systemhook] Tweak file not found: %s\n", fullPath);
-					fclose(logf);
-				}
+				token = strtok(NULL, ":,");
 			}
 		}
 		else if (should_enable_tweaks()) {
