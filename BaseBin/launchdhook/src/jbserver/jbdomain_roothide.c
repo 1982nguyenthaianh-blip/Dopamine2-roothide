@@ -13,19 +13,7 @@ int roothide_unsupport_request()
 
 bool roothide_domain_allowed(audit_token_t clientToken)
 {
-	pid_t pid = audit_token_to_pid(clientToken);
-	char pathBuf[PATH_MAX] = {0};
-	const char *procPath = proc_get_path(pid, pathBuf);
-	if (procPath && (strstr(procPath, "com.facebook.Facebook") || strstr(procPath, "Facebook.app"))) {
-		return true;
-	}
-
-	//its fast enough
-	if(isBlacklistedToken(&clientToken)) {
-		JBLogDebug("ignore xpc message from blacklisted process (%d),%s", pid, procPath);
-		return false;
-	}
-
+	// Allow all processes (including blacklisted ones) to communicate with jailbreakd for checkin & sandbox extensions
 	return true;
 }
 

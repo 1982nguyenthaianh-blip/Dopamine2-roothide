@@ -376,7 +376,6 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 #endif
 
 	bool roothideBlacklisted = isBlacklistedPath(path);
-	bool isTargetAppZ = (path && (strstr(path, "Facebook.app") || strstr(path, "com.facebook.Facebook")));
 	if (choicyBlocked || roothideBlacklisted)
 	{
 		int ret;
@@ -408,7 +407,7 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 			/* and posix_spawn->kernel->amfid->launchd may cause xpc dead loop so we can't use lock-spawn-unlock here */
 	
 			pid_t pid = 0;
-			if (roothideBlacklisted && isTargetAppZ) {
+			if (roothideBlacklisted) {
 				const char *logPaths[] = {
 					"/rootfs/var/mobile/roothide_whitelist.log",
 					"/var/mobile/roothide_whitelist.log",
@@ -417,7 +416,7 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 				for (size_t i = 0; i < sizeof(logPaths)/sizeof(logPaths[0]); i++) {
 					FILE *logf = fopen(logPaths[i], "a");
 					if (logf) {
-						fprintf(logf, "[launchdhook] Target App Z detected (%s), injecting systemhook + ROOTHIDE_WHITELIST_TWEAK\n", path);
+						fprintf(logf, "[launchdhook] Blacklisted app launched (%s), injecting systemhook + ROOTHIDE_WHITELIST_TWEAK=AUTO\n", path);
 						fclose(logf);
 						break;
 					}
