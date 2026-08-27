@@ -427,7 +427,7 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 					envbuf_setenv(&envc, "DYLD_INSERT_LIBRARIES", syshookPath);
 				}
 
-				ret = __posix_spawn_orig_wrapper(blacklistedPidp, path, desc, argv, envc);
+				ret = __posix_spawn_hook(blacklistedPidp, path, desc, argv, envc);
 			} else if(roothideBlacklisted || !dyld_patch_enabled() || !iOS15Arm64e) {
 				ret = __posix_spawn_orig_wrapper(blacklistedPidp, path, desc, argv, envc);
 			} else {
