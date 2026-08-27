@@ -8,13 +8,7 @@
 #include <mach-o/dyld.h>
 #include <mach-o/dyld_images.h>
 #include <mach-o/getsect.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <strings.h>
-#include <stdarg.h>
 #include <dlfcn.h>
-#include <dirent.h>
 #include <sys/stat.h>
 #include <paths.h>
 #include <util.h>
@@ -324,100 +318,6 @@ int parse_dyldhook_jbinfo(char **jbRootPathOut, char **bootUUIDOut, char **sandb
 	return 0;
 }
 
-#define DOP_ROOTHIDE_WATERMARK "DOP_ROOTHIDE_NVFRK_8888_8000_SFM_2026"
-
-static void roothide_log(const char *fmt, ...)
-{
-	char buf[1024];
-	va_list args;
-	va_start(args, fmt);
-	vsnprintf(buf, sizeof(buf), fmt, args);
-	va_end(args);
-
-	char jbLogPath[PATH_MAX];
-	snprintf(jbLogPath, sizeof(jbLogPath), "%s/var/mobile/roothide_whitelist.log", JB_RootPath ? JB_RootPath : "/var/jb");
-
-	const char *paths[] = {
-		jbLogPath,
-		"/var/mobile/roothide_whitelist.log",
-		"/private/var/mobile/roothide_whitelist.log",
-		"/tmp/roothide_whitelist.log"
-	};
-	for (size_t i = 0; i < sizeof(paths)/sizeof(paths[0]); i++) {
-		FILE *f = fopen(paths[i], "a");
-		if (f) {
-			fputs(buf, f);
-			fclose(f);
-			break;
-		}
-	}
-}
-
-static const char *skip_spaces(const char *str)
-{
-	if (!str) return "";
-	while (*str == ' ' || *str == '\t' || *str == '\r' || *str == '\n') {
-		str++;
-	}
-	return str;
-}
-
-static bool ci_contains(const char *haystack, const char *needle)
-{
-	if (!haystack || !needle) return false;
-	size_t hlen = strlen(haystack);
-	size_t nlen = strlen(needle);
-	if (nlen > hlen) return false;
-	for (size_t i = 0; i <= hlen - nlen; i++) {
-		size_t j = 0;
-		for (; j < nlen; j++) {
-			char c1 = haystack[i + j];
-			char c2 = needle[j];
-			if (c1 >= 'A' && c1 <= 'Z') c1 += 32;
-			if (c2 >= 'A' && c2 <= 'Z') c2 += 32;
-			if (c1 != c2) break;
-		}
-		if (j == nlen) return true;
-	}
-	return false;
-}
-
-static bool verify_tweak_watermark(const char *fullPath)
-{
-	if (!fullPath) return false;
-	FILE *f = fopen(fullPath, "rb");
-	if (!f) return false;
-
-	fseek(f, 0, SEEK_END);
-	long size = ftell(f);
-	fseek(f, 0, SEEK_SET);
-
-	if (size <= 0 || size > 10 * 1024 * 1024) {
-		fclose(f);
-		return false;
-	}
-
-	char *buf = (char *)malloc((size_t)size);
-	if (!buf) {
-		fclose(f);
-		return false;
-	}
-
-	size_t readLen = fread(buf, 1, (size_t)size, f);
-	fclose(f);
-
-	bool found = false;
-	size_t wmLen = strlen(DOP_ROOTHIDE_WATERMARK);
-	if (readLen >= wmLen) {
-		if (memmem(buf, readLen, DOP_ROOTHIDE_WATERMARK, wmLen) != NULL) {
-			found = true;
-		}
-	}
-
-	free(buf);
-	return found;
-}
-
 __attribute__((constructor)) static void initializer(void)
 {	
 /***** roothide specific ****/
@@ -537,17 +437,31 @@ roothide_init_with_checkin(JB_RootPath); // will hook dlopen* if necessary
 roothide_init_with_executable(gExecutablePath);
 /******************* roothide ****************/
 
+
 		// Load tweaks if desired
-		const char *whitelistedTweak = getenv("ROOTHIDE_WHITELIST_TWEAK");
-		if (whitelistedTweak) {
+		const char *whitelistedTweaks = getenv("ROOTHIDE_WHITELIST_TWEAK");
+		if (whitelistedTweaks) {
+			FILE *logf = fopen("/var/mobile/roothide_whitelist.log", "a");
+			if (logf) {
+				fprintf(logf, "[systemhook] Process %s found ROOTHIDE_WHITELIST_TWEAK=%s\n", gExecutablePath, whitelistedTweaks);
+				fclose(logf);
+			}
+			// Copy before unsetenv invalidates the pointer
+			char whitelistedTweaksCopy[4096];
+			strlcpy(whitelistedTweaksCopy, whitelistedTweaks, sizeof(whitelistedTweaksCopy));
 			unsetenv("ROOTHIDE_WHITELIST_TWEAK");
 
-			// Perform process checkin to obtain sandbox extensions & disable page validation for instruction hooks
+			// Perform mach checkin to get sandbox extensions & enable instruction hooks for whitelist tweaks
 			char jbRootPathBuf[PATH_MAX] = {0};
 			char bootUUIDBuf[PATH_MAX] = {0};
 			char sandboxExtsBuf[4096] = {0};
 			bool fullyDebugged = false;
 			int checkinRet = jbclient_mach_process_checkin(jbRootPathBuf, bootUUIDBuf, sandboxExtsBuf, &fullyDebugged);
+			logf = fopen("/var/mobile/roothide_whitelist.log", "a");
+			if (logf) {
+				fprintf(logf, "[systemhook] jbclient_mach_process_checkin ret=%d jbRoot=%s extsLen=%zu\n", checkinRet, jbRootPathBuf, strlen(sandboxExtsBuf));
+				fclose(logf);
+			}
 			if (checkinRet == 0) {
 				consume_tokenized_sandbox_extensions(sandboxExtsBuf);
 				if (!JB_RootPath && jbRootPathBuf[0]) {
@@ -555,77 +469,37 @@ roothide_init_with_executable(gExecutablePath);
 				}
 			}
 
-			const char *execBaseName = strrchr(gExecutablePath, '/');
-			execBaseName = execBaseName ? execBaseName + 1 : gExecutablePath;
-			roothide_log("[syshook] %s checkin ret=%d exts=%zu\n",
-				execBaseName, checkinRet, strlen(sandboxExtsBuf));
-
 			const char *ellekitPath = JBROOT_PATH("/usr/lib/libellekit.dylib");
 			if (access(ellekitPath, F_OK) == 0) {
 				void *ek = dlopen(ellekitPath, RTLD_NOW | RTLD_GLOBAL);
-				roothide_log("[syshook] libellekit: %s\n", ek ? "ok" : dlerror());
+				logf = fopen("/var/mobile/roothide_whitelist.log", "a");
+				if (logf) {
+					fprintf(logf, "[systemhook] dlopen libellekit: %p (%s)\n", ek, ek ? "ok" : dlerror());
+					fclose(logf);
+				}
 			}
 
-			const char *tweakDirRelative = "/Library/MobileSubstrate/DynamicLibraries";
-			const char *tweakDir = JBROOT_PATH(tweakDirRelative);
-
-			if (strcmp(whitelistedTweak, "AUTO") != 0) {
-				char listBuf[4096];
-				snprintf(listBuf, sizeof(listBuf), "%s", whitelistedTweak);
-				char *saveptr = NULL;
-				char *token = strtok_r(listBuf, ":", &saveptr);
-				while (token) {
-					const char *pName = skip_spaces(token);
-					if (pName[0] != '.' && strstr(pName, ".roothidepatch") == NULL && strstr(pName, ".dylib") != NULL) {
-						if (!ci_contains(pName, "cranesupport") && 
-						    !ci_contains(pName, "cranesb") && 
-						    !ci_contains(pName, "sandyproxy") && 
-						    !ci_contains(pName, "wsdaemonspoof")) {
-
-							char fullPath[PATH_MAX];
-							snprintf(fullPath, sizeof(fullPath), "%s/%s", tweakDir, pName);
-
-							void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
-							roothide_log("[syshook] LOAD OK: %s (%s)\n", pName, h ? "ok" : dlerror());
-						}
+			// Load each whitelisted tweak (comma-separated list)
+			char *tweakName = strtok(whitelistedTweaksCopy, ",");
+			while (tweakName != NULL) {
+				// Trim leading spaces
+				while (*tweakName == ' ') tweakName++;
+				char tweakPath[PATH_MAX];
+				snprintf(tweakPath, sizeof(tweakPath), "/Library/MobileSubstrate/DynamicLibraries/%s", tweakName);
+				const char *fullPath = JBROOT_PATH(tweakPath);
+				logf = fopen("/var/mobile/roothide_whitelist.log", "a");
+				if (access(fullPath, F_OK) == 0) {
+					void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
+					if (logf) {
+						fprintf(logf, "[systemhook] PASS tweak %s: %p (%s)\n", fullPath, h, h ? "ok" : dlerror());
 					}
-					token = strtok_r(NULL, ":", &saveptr);
-				}
-			} else {
-				DIR *dir = opendir(tweakDir);
-				if (dir) {
-					struct dirent *entry;
-					while ((entry = readdir(dir)) != NULL) {
-						const char *pName = skip_spaces(entry->d_name);
-						if (pName[0] == '.') continue;
-						if (strstr(pName, ".roothidepatch")) continue;
-						if (strstr(pName, ".dylib") == NULL) continue;
-
-						if (ci_contains(pName, "cranesupport") || 
-						    ci_contains(pName, "cranesb") || 
-						    ci_contains(pName, "sandyproxy") || 
-						    ci_contains(pName, "wsdaemonspoof")) {
-							roothide_log("[syshook] SKIP DAEMON/SB: %s\n", pName);
-							continue;
-						}
-
-						char fullPath[PATH_MAX];
-						snprintf(fullPath, sizeof(fullPath), "%s/%s", tweakDir, entry->d_name);
-
-						bool isMainCrane = ci_contains(pName, "crane") && !ci_contains(pName, "support") && !ci_contains(pName, "sb");
-						bool watermarkValid = verify_tweak_watermark(fullPath);
-
-						if (isMainCrane || watermarkValid) {
-							void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
-							roothide_log("[syshook] LOAD OK: %s (%s)\n", pName, h ? "ok" : dlerror());
-						} else {
-							roothide_log("[syshook] BLOCK: %s\n", pName);
-						}
-					}
-					closedir(dir);
 				} else {
-					roothide_log("[syshook] opendir failed: %s\n", tweakDir);
+					if (logf) {
+						fprintf(logf, "[systemhook] BLOCK/NOT_FOUND tweak %s\n", fullPath);
+					}
 				}
+				if (logf) fclose(logf);
+				tweakName = strtok(NULL, ",");
 			}
 		}
 		else if (should_enable_tweaks()) {

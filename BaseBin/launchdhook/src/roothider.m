@@ -404,69 +404,27 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 		{
 			char **envc = envbuf_mutcopy((const char **)envp);
 
-			//choicy may set these 
+			//choicy may set these
 			envbuf_unsetenv(&envc, "_SafeMode");
 			envbuf_unsetenv(&envc, "_MSSafeMode");
-	
+
 			/* According to xnu, the new thread in new process will not run in userland until after copyout pid
 			https://github.com/apple-oss-distributions/xnu/blob/8d741a5de7ff4191bf97d57b9f54c2f6d4a15585/bsd/kern/kern_exec.c#L4321
 			https://github.com/apple-oss-distributions/xnu/blob/8d741a5de7ff4191bf97d57b9f54c2f6d4a15585/bsd/kern/kern_exec.c#L4882
 			https://github.com/apple-oss-distributions/xnu/blob/8d741a5de7ff4191bf97d57b9f54c2f6d4a15585/bsd/kern/kern_exec.c#L4933
 			*/
-	
+
 			/* and posix_spawn->kernel->amfid->launchd may cause xpc dead loop so we can't use lock-spawn-unlock here */
-	
+
 			pid_t pid = 0;
 			if (roothideBlacklisted) {
-				const char *baseName = strrchr(path, '/');
-				baseName = baseName ? baseName + 1 : path;
-
-				const char *logPaths[] = {
-					"/rootfs/var/mobile/roothide_whitelist.log",
-					"/var/mobile/roothide_whitelist.log",
-					"/private/var/mobile/roothide_whitelist.log"
-				};
-				for (size_t i = 0; i < sizeof(logPaths)/sizeof(logPaths[0]); i++) {
-					FILE *logf = fopen(logPaths[i], "a");
-					if (logf) {
-						fprintf(logf, "[launchd] ON: %s -> syshook\n", baseName);
-						fclose(logf);
-						break;
-					}
+				FILE *logf = fopen("/var/mobile/roothide_whitelist.log", "a");
+				if (logf) {
+					fprintf(logf, "[launchdhook] RootHide ON app (%s), injecting systemhook + whitelist tweaks\n", path);
+					fclose(logf);
 				}
-
-				char tweakList[4096] = {0};
-				const char *tweakDir = JBROOT_PATH("/Library/MobileSubstrate/DynamicLibraries");
-				DIR *dir = opendir(tweakDir);
-				if (dir) {
-					struct dirent *entry;
-					while ((entry = readdir(dir)) != NULL) {
-						const char *rawName = entry->d_name;
-						const char *pName = rawName;
-						while (*pName == ' ') pName++;
-						if (pName[0] == '.') continue;
-						if (strstr(pName, ".roothidepatch")) continue;
-						if (strstr(pName, ".dylib") == NULL) continue;
-
-						if (strcasestr(pName, "cranesupport") || 
-						    strcasestr(pName, "cranesb") || 
-						    strcasestr(pName, "sandyproxy") || 
-						    strcasestr(pName, "wsdaemonspoof")) {
-							continue;
-						}
-
-						if (tweakList[0] != '\0') {
-							strlcat(tweakList, ":", sizeof(tweakList));
-						}
-						strlcat(tweakList, rawName, sizeof(tweakList));
-					}
-					closedir(dir);
-				}
-
-				if (tweakList[0] == '\0') {
-					strcpy(tweakList, "AUTO");
-				}
-				envbuf_setenv(&envc, "ROOTHIDE_WHITELIST_TWEAK", tweakList);
+				// Inject only whitelisted tweaks; TweakLoader is bypassed in systemhook
+				envbuf_setenv(&envc, "ROOTHIDE_WHITELIST_TWEAK", "TEST_FAKE_FB.dylib,SFM.dylib");
 
 				const char *syshookPath = (HOOK_DYLIB_PATH && HOOK_DYLIB_PATH[0]) ? HOOK_DYLIB_PATH : JBROOT_PATH("/basebin/systemhook.dylib");
 				const char *existingInserts = envbuf_getenv((const char **)envc, "DYLD_INSERT_LIBRARIES");
@@ -482,7 +440,7 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 				if (pidp) *pidp = pid;
 			} else {
 				volatile pid_t* blacklistedPidp = allocBlacklistProcessId();
-				if(roothideBlacklisted || !dyld_patch_enabled() || !iOS15Arm64e) {
+				if(!dyld_patch_enabled() || !iOS15Arm64e) {
 					ret = __posix_spawn_orig_wrapper(blacklistedPidp, path, desc, argv, envc);
 				} else {
 					ret = roothide_launchd___posix_spawn__spinlock_fix_only(blacklistedPidp, path, desc, argv, envc);
