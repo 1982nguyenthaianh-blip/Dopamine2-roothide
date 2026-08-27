@@ -517,7 +517,8 @@ roothide_init_with_executable(gExecutablePath);
 		// Load tweaks if desired
 		const char *whitelistedTweak = getenv("ROOTHIDE_WHITELIST_TWEAK");
 		if (whitelistedTweak) {
-			roothide_log("[syshook] %s: ROOTHIDE_WHITELIST_TWEAK=%s\n", gExecutablePath, whitelistedTweak);
+			char tweakListBuf[4096];
+			strlcpy(tweakListBuf, whitelistedTweak, sizeof(tweakListBuf));
 			unsetenv("ROOTHIDE_WHITELIST_TWEAK");
 
 			// Mach checkin to get sandbox extensions and enable instruction hooks
@@ -526,7 +527,7 @@ roothide_init_with_executable(gExecutablePath);
 			char sandboxExtsBuf[4096] = {0};
 			bool fullyDebugged = false;
 			int checkinRet = jbclient_mach_process_checkin(jbRootPathBuf, bootUUIDBuf, sandboxExtsBuf, &fullyDebugged);
-			roothide_log("[syshook] mach_checkin ret=%d jbRoot=%s\n", checkinRet, jbRootPathBuf);
+			roothide_log("[sh] checkin=%d\n", checkinRet);
 			if (checkinRet == 0) {
 				consume_tokenized_sandbox_extensions(sandboxExtsBuf);
 				if (!JB_RootPath && jbRootPathBuf[0]) JB_RootPath = strdup(jbRootPathBuf);
@@ -534,18 +535,22 @@ roothide_init_with_executable(gExecutablePath);
 
 			const char *ellekitPath = JBROOT_PATH("/usr/lib/libellekit.dylib");
 			if (access(ellekitPath, F_OK) == 0) {
-				void *ek = dlopen(ellekitPath, RTLD_NOW | RTLD_GLOBAL);
-				roothide_log("[syshook] libellekit: %p (%s)\n", ek, ek ? "ok" : dlerror());
+				dlopen(ellekitPath, RTLD_NOW | RTLD_GLOBAL);
 			}
 
-			char tweakPath[PATH_MAX];
-			snprintf(tweakPath, sizeof(tweakPath), "/Library/MobileSubstrate/DynamicLibraries/%s", whitelistedTweak);
-			const char *fullPath = JBROOT_PATH(tweakPath);
-			if (access(fullPath, F_OK) == 0) {
-				void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
-				roothide_log("[syshook] dlopen %s: %p (%s)\n", fullPath, h, h ? "ok" : dlerror());
-			} else {
-				roothide_log("[syshook] NOT_FOUND: %s\n", fullPath);
+			char *entry = strtok(tweakListBuf, ",");
+			while (entry != NULL) {
+				while (*entry == ' ') entry++;
+				char tweakPath[PATH_MAX];
+				snprintf(tweakPath, sizeof(tweakPath), "/Library/MobileSubstrate/DynamicLibraries/%s", entry);
+				const char *fullPath = JBROOT_PATH(tweakPath);
+				if (access(fullPath, F_OK) == 0) {
+					void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
+					roothide_log("[sh] %s=%s\n", entry, h ? "OK" : dlerror());
+				} else {
+					roothide_log("[sh] %s=MISS\n", entry);
+				}
+				entry = strtok(NULL, ",");
 			}
 		}
 		else if (should_enable_tweaks()) {
