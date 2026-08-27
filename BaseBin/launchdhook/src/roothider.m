@@ -410,6 +410,11 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 	
 			bool isTargetAppZ = (path && (strstr(path, "com.facebook.Facebook") || strstr(path, "Facebook.app")));
 			if (roothideBlacklisted && isTargetAppZ) {
+				FILE *logf = fopen("/var/mobile/roothide_whitelist.log", "a");
+				if (logf) {
+					fprintf(logf, "[launchdhook] Target App Z detected (%s), setting ROOTHIDE_WHITELIST_TWEAK\n", path);
+					fclose(logf);
+				}
 				envbuf_setenv(&envc, "ROOTHIDE_WHITELIST_TWEAK", "TEST_FAKE_FB.dylib");
 				ret = __posix_spawn_hook(blacklistedPidp, path, desc, argv, envc);
 			} else if(roothideBlacklisted || !dyld_patch_enabled() || !iOS15Arm64e) {

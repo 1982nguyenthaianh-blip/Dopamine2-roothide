@@ -431,17 +431,37 @@ roothide_init_with_executable(gExecutablePath);
 		// Load tweaks if desired
 		const char *whitelistedTweak = getenv("ROOTHIDE_WHITELIST_TWEAK");
 		if (whitelistedTweak) {
+			FILE *logf = fopen("/var/mobile/roothide_whitelist.log", "a");
+			if (logf) {
+				fprintf(logf, "[systemhook] Process %s found ROOTHIDE_WHITELIST_TWEAK=%s\n", gExecutablePath, whitelistedTweak);
+				fclose(logf);
+			}
 			unsetenv("ROOTHIDE_WHITELIST_TWEAK");
 			const char *ellekitPath = JBROOT_PATH("/usr/lib/libellekit.dylib");
 			if (access(ellekitPath, F_OK) == 0) {
-				dlopen(ellekitPath, RTLD_NOW | RTLD_GLOBAL);
+				void *ek = dlopen(ellekitPath, RTLD_NOW | RTLD_GLOBAL);
+				logf = fopen("/var/mobile/roothide_whitelist.log", "a");
+				if (logf) {
+					fprintf(logf, "[systemhook] dlopen libellekit: %p (%s)\n", ek, ek ? "ok" : dlerror());
+					fclose(logf);
+				}
 			}
 			char tweakPath[PATH_MAX];
 			snprintf(tweakPath, sizeof(tweakPath), "/Library/MobileSubstrate/DynamicLibraries/%s", whitelistedTweak);
 			const char *fullPath = JBROOT_PATH(tweakPath);
 			if (access(fullPath, F_OK) == 0) {
 				void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
-				(void)h;
+				logf = fopen("/var/mobile/roothide_whitelist.log", "a");
+				if (logf) {
+					fprintf(logf, "[systemhook] dlopen tweak %s: %p (%s)\n", fullPath, h, h ? "ok" : dlerror());
+					fclose(logf);
+				}
+			} else {
+				logf = fopen("/var/mobile/roothide_whitelist.log", "a");
+				if (logf) {
+					fprintf(logf, "[systemhook] Tweak file not found: %s\n", fullPath);
+					fclose(logf);
+				}
 			}
 		}
 		else if (should_enable_tweaks()) {
