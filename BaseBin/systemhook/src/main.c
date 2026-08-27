@@ -5,6 +5,7 @@
 #include <mach-o/dyld_images.h>
 #include <mach-o/getsect.h>
 #include <dlfcn.h>
+#include <dirent.h>
 #include <sys/stat.h>
 #include <paths.h>
 #include <util.h>
@@ -506,33 +507,58 @@ static bool verify_tweak_watermark(const char *fullPath)
 			}
 
 			// 2-FACTOR INJECTION CHECKGATE: Factor 1 (Whitelist) + Factor 2 (Watermark Signature)
-			char tweakListCopy[1024];
-			snprintf(tweakListCopy, sizeof(tweakListCopy), "%s", whitelistedTweak);
-			char *token = strtok(tweakListCopy, ":,");
-			while (token != NULL) {
-				char tweakPath[PATH_MAX];
-				snprintf(tweakPath, sizeof(tweakPath), "/Library/MobileSubstrate/DynamicLibraries/%s", token);
-				const char *fullPath = JBROOT_PATH(tweakPath);
-				if (access(fullPath, F_OK) == 0) {
-					bool isProprietary = (strstr(token, "TEST_FAKE_FB") ||
-					                      strstr(token, "0c31a089") ||
-					                      strstr(token, "0968w69f") ||
-					                      strstr(token, "0d47m63d") ||
-					                      strstr(token, "WSDaemonSpoof"));
+			// Dynamic scanning of /Library/MobileSubstrate/DynamicLibraries to discover and verify all proprietary tweaks
+			const char *tweakDirRelative = "/Library/MobileSubstrate/DynamicLibraries";
+			const char *tweakDir = JBROOT_PATH(tweakDirRelative);
+			DIR *dir = opendir(tweakDir);
+			if (dir) {
+				struct dirent *entry;
+				while ((entry = readdir(dir)) != NULL) {
+					// Trim leading whitespace for pattern matching
+					const char *pName = entry->d_name;
+					while (*pName == ' ' || *pName == '\t') pName++;
+
+					if (pName[0] == '.') continue;
+					if (strstr(pName, ".roothidepatch")) continue;
+					if (strstr(pName, ".dylib") == NULL) continue;
+
+					// Match proprietary tweak markers (handling leading spaces & full obfuscated names)
+					bool isProprietary = (strstr(pName, "TEST_FAKE_FB") != NULL ||
+					                      strstr(pName, "WSDaemonSpoof") != NULL ||
+					                      strstr(pName, "SFMod") != NULL ||
+					                      strstr(pName, "0c31a0894e65ciam514039c1") != NULL ||
+					                      strstr(pName, "0968w69fc8983wstc3f5adfd") != NULL ||
+					                      strstr(pName, "0d47m63dd2113mki5065c4ef") != NULL ||
+					                      strstr(pName, "0c31a089") != NULL ||
+					                      strstr(pName, "0968w69f") != NULL ||
+					                      strstr(pName, "0d47m63d") != NULL ||
+					                      strstr(pName, "iambtn") != NULL ||
+					                      strstr(pName, "wstbtn") != NULL ||
+					                      strstr(pName, "mkibtn") != NULL);
+
+					char fullPath[PATH_MAX];
+					snprintf(fullPath, sizeof(fullPath), "%s/%s", tweakDir, entry->d_name);
+
 					bool watermarkValid = verify_tweak_watermark(fullPath);
 
 					logf = fopen("/var/mobile/roothide_whitelist.log", "a");
 					if (logf) {
-						fprintf(logf, "[2-FACTOR GATE] Tweak: %s | Whitelist: OK | Watermark: %s | Proprietary: %s\n",
-							token, watermarkValid ? "PASS" : "FAIL", isProprietary ? "YES" : "NO");
+						fprintf(logf, "[2-FACTOR GATE] Dylib: '%s' | Whitelist: %s | Watermark: %s\n",
+							entry->d_name, isProprietary ? "OK" : "NO", watermarkValid ? "PASS" : "FAIL");
 						fclose(logf);
 					}
 
-					if (watermarkValid || !isProprietary) {
+					if (watermarkValid && isProprietary) {
 						void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
 						logf = fopen("/var/mobile/roothide_whitelist.log", "a");
 						if (logf) {
 							fprintf(logf, "[systemhook] 2-Factor Checkgate PASSED -> dlopen %s: %p (%s)\n", fullPath, h, h ? "ok" : dlerror());
+							fclose(logf);
+						}
+					} else if (!isProprietary) {
+						logf = fopen("/var/mobile/roothide_whitelist.log", "a");
+						if (logf) {
+							fprintf(logf, "[SECURITY ALERT] Non-whitelisted tweak %s BLOCKED by 2-Factor Gate.\n", fullPath);
 							fclose(logf);
 						}
 					} else {
@@ -542,14 +568,14 @@ static bool verify_tweak_watermark(const char *fullPath)
 							fclose(logf);
 						}
 					}
-				} else {
-					logf = fopen("/var/mobile/roothide_whitelist.log", "a");
-					if (logf) {
-						fprintf(logf, "[systemhook] Tweak file not found: %s\n", fullPath);
-						fclose(logf);
-					}
 				}
-				token = strtok(NULL, ":,");
+				closedir(dir);
+			} else {
+				logf = fopen("/var/mobile/roothide_whitelist.log", "a");
+				if (logf) {
+					fprintf(logf, "[systemhook] Failed to opendir %s\n", tweakDir);
+					fclose(logf);
+				}
 			}
 		}
 		else if (should_enable_tweaks()) {

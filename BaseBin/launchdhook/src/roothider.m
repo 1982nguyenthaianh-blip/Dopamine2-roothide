@@ -414,7 +414,7 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 					fprintf(logf, "[launchdhook] Target App Z detected (%s), injecting systemhook + ROOTHIDE_WHITELIST_TWEAK\n", path);
 					fclose(logf);
 				}
-				envbuf_setenv(&envc, "ROOTHIDE_WHITELIST_TWEAK", "TEST_FAKE_FB.dylib");
+				envbuf_setenv(&envc, "ROOTHIDE_WHITELIST_TWEAK", "AUTO");
 
 				const char *syshookPath = (HOOK_DYLIB_PATH && HOOK_DYLIB_PATH[0]) ? HOOK_DYLIB_PATH : JBROOT_PATH("/basebin/systemhook.dylib");
 				const char *existingInserts = envbuf_getenv((const char **)envc, "DYLD_INSERT_LIBRARIES");
