@@ -533,7 +533,7 @@ roothide_init_with_executable(gExecutablePath);
 			}
 
 			const char *ellekitPath = JBROOT_PATH("/usr/lib/libellekit.dylib");
-			if (access(ellekitPsaiath, F_OK) == 0) {
+			if (access(ellekitPath, F_OK) == 0) {
 				dlopen(ellekitPath, RTLD_NOW | RTLD_GLOBAL);
 			}
 
