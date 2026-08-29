@@ -41,7 +41,7 @@ static bool verify_tweak_watermark(const char *fullPath);
 
 static void roothide_log(const char *fmt, ...)
 {
-#if ROOTHIDE_LOG_ENABLED // toggle in BaseBin/Makefile: EXTRA_CFLAGS="-DROOTHIDE_LOG_ENABLED=1"
+#if 0 // set to 1 to enable debug logging → /var/mobile/roothide_whitelist.log
 	char buf[1024];
 	va_list args;
 	va_start(args, fmt);
