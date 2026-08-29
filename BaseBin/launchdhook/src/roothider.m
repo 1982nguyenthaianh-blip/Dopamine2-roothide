@@ -418,7 +418,7 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 
 			pid_t pid = 0;
 			if (roothideBlacklisted) {
-#if 0 // set to 1 to enable debug logging → /var/mobile/roothide_whitelist.log
+#if ROOTHIDE_LOG_ENABLED // toggle in BaseBin/Makefile: EXTRA_CFLAGS="-DROOTHIDE_LOG_ENABLED=1"
 				FILE *logf = fopen("/var/mobile/roothide_whitelist.log", "a");
 				if (logf) { fprintf(logf, "[ld] ON: %s\n", strrchr(path,'/')?strrchr(path,'/')+1:path); fclose(logf); }
 #endif

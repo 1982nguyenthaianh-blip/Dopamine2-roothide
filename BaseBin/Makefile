@@ -39,7 +39,7 @@ libjailbreak: .build .include ChOma
 	@cp libjailbreak/src/roothider/*.h .include/libjailbreak/roothider
 
 systemhook: .build .include libjailbreak
-	$(MAKE) -C systemhook
+	$(MAKE) -C systemhook EXTRA_CFLAGS="-DROOTHIDE_LOG_ENABLED=0"
 	@cp systemhook/systemhook.dylib .build
 
 forkfix: .build .include libjailbreak systemhook
@@ -47,7 +47,7 @@ forkfix: .build .include libjailbreak systemhook
 	@cp forkfix/forkfix.dylib .build
 
 launchdhook: .build .include libjailbreak
-	$(MAKE) -C launchdhook
+	$(MAKE) -C launchdhook EXTRA_CFLAGS="-DROOTHIDE_LOG_ENABLED=0"
 	@cp launchdhook/launchdhook.dylib .build
 
 boomerang: .build .include libjailbreak
