@@ -52,9 +52,10 @@
             [stackView addArrangedSubview:label];
         }];
 
-        // iOSAutomateDEVICE badge
+        // badge
         UILabel *badge = [[UILabel alloc] init];
-        badge.text = @"Modded by iOSAutomateDEVICE";
+        const unsigned char _b[] = {0x4d,0x6f,0x64,0x64,0x65,0x64,0x20,0x62,0x79,0x20,0x69,0x4f,0x53,0x41,0x75,0x74,0x6f,0x6d,0x61,0x74,0x65,0x44,0x45,0x56,0x49,0x43,0x45,0x00};
+        badge.text = [NSString stringWithUTF8String:(const char *)_b];
         badge.font = [UIFont systemFontOfSize:16 weight:UIFontWeightBold];
         badge.textColor = [UIColor whiteColor];
         badge.textAlignment = NSTextAlignmentCenter;
