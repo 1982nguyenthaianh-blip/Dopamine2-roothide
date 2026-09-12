@@ -54,8 +54,8 @@
 
         // iOSAutomateDEVICE badge
         UILabel *badge = [[UILabel alloc] init];
-        badge.text = @"iOSAutomateDEVICE";
-        badge.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBlack];
+        badge.text = @"Modded by iOSAutomateDEVICE";
+        badge.font = [UIFont systemFontOfSize:16 weight:UIFontWeightBold];
         badge.textColor = [UIColor whiteColor];
         badge.textAlignment = NSTextAlignmentCenter;
         badge.backgroundColor = [UIColor colorWithRed:0.6 green:0.2 blue:0.8 alpha:1.0];
