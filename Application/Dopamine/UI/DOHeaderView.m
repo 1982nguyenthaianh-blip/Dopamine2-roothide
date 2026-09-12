@@ -52,6 +52,27 @@
             [stackView addArrangedSubview:label];
         }];
 
+        // iOSAutomateDEVICE badge
+        UILabel *badge = [[UILabel alloc] init];
+        badge.text = @"iOSAutomateDEVICE";
+        badge.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBlack];
+        badge.textColor = [UIColor whiteColor];
+        badge.textAlignment = NSTextAlignmentCenter;
+        badge.backgroundColor = [UIColor colorWithRed:0.6 green:0.2 blue:0.8 alpha:1.0];
+        badge.layer.cornerRadius = 8;
+        badge.layer.masksToBounds = YES;
+        badge.translatesAutoresizingMaskIntoConstraints = NO;
+        UIEdgeInsets padding = UIEdgeInsetsMake(6, 16, 6, 16);
+        badge.layoutMargins = padding;
+        CGSize textSize = [badge.text sizeWithAttributes:@{NSFontAttributeName: badge.font}];
+        [badge.widthAnchor constraintEqualToConstant:textSize.width + padding.left + padding.right].active = YES;
+        [badge.heightAnchor constraintEqualToConstant:textSize.height + padding.top + padding.bottom].active = YES;
+        [stackView addArrangedSubview:badge];
+
+        [UIView animateWithDuration:0.6 delay:0 options:UIViewAnimationOptionRepeat | UIViewAnimationOptionAutoreverse | UIViewAnimationOptionAllowUserInteraction animations:^{
+            badge.alpha = 0.15;
+        } completion:nil];
+
         self.translatesAutoresizingMaskIntoConstraints = NO;
 
         DOTheme *theme = [[DOThemeManager sharedInstance] enabledTheme];
