@@ -14,7 +14,8 @@
 #include "hookd_provider.h"
 extern char **environ;
 
-void abort_with_reason(uint32_t reason_namespace, uint64_t reason_code, const char *reason_string, uint64_t reason_flags);
+//void abort_with_reason(uint32_t reason_namespace, uint64_t reason_code, const char *reason_string, uint64_t reason_flags);
+#define abort_with_reason(reason_namespace,reason_code,reason_string,reason_flags)  launchd_panic("%s",reason_string)
 
 extern int systemwide_trust_file_by_path(const char *path);
 extern int platform_set_process_debugged(uint64_t pid, bool fullyDebugged);

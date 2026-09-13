@@ -32,7 +32,9 @@
 
 bool gInEarlyBoot = true;
 
-void abort_with_reason(uint32_t reason_namespace, uint64_t reason_code, const char *reason_string, uint64_t reason_flags);
+//void abort_with_reason(uint32_t reason_namespace, uint64_t reason_code, const char *reason_string, uint64_t reason_flags);
+extern void launchd_panic(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
+#define abort_with_reason(reason_namespace,reason_code,reason_string,reason_flags)  launchd_panic("%s",reason_string)
 extern void systemwide_domain_set_enabled(bool enabled);
 
 /*********************** roothide specific ********************/
@@ -95,9 +97,7 @@ int sysctlbyname_hook(const char *name, void *oldp, size_t *oldlenp, void *newp,
 /*************************************************************/
 
 	int r = sysctlbyname_orig(name, oldp, oldlenp, newp, newlen);
-	if (!strcmp(name, "kern.willuserspacereboot")) {
-		draw_boot_logo(JBROOT_PATH("/basebin/bootlogo.jp2"));
-	}
+	// draw_boot_logo moved to __sysctlbyname_launchd_hook in roothider.m — avoid double call
 	return r;
 }
 
