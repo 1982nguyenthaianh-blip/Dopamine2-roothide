@@ -41,15 +41,6 @@ struct hfs_mount_args {
 };
 
 NSString *const bootstrapErrorDomain = @"BootstrapErrorDomain";
-typedef NS_ENUM(NSInteger, JBErrorCode) {
-    BootstrapErrorCodeFailedToGetURL            = -1,
-    BootstrapErrorCodeFailedToDownload          = -2,
-    BootstrapErrorCodeFailedDecompressing       = -3,
-    BootstrapErrorCodeFailedExtracting          = -4,
-    BootstrapErrorCodeFailedRemount             = -5,
-    BootstrapErrorCodeFailedFinalising          = -6,
-    BootstrapErrorCodeFailedReplacing           = -7,
-};
 
 #define BUFFER_SIZE 8192
 
@@ -1407,6 +1398,9 @@ int getCFMajorVersion(void)
         }
     }
     
+    return nil;
+}
+
 - (NSError *)updateVarJbSymlink
 {
     return nil;
