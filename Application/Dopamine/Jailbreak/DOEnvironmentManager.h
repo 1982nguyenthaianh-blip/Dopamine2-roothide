@@ -13,6 +13,8 @@ NS_ASSUME_NONNULL_BEGIN
 @interface DOEnvironmentManager : NSObject
 {
     DOBootstrapper *_bootstrapper;
+    BOOL _isJailbroken;
+    NSString *_jailbrokenVersion;
     BOOL _bootstrapNeedsMigration;
 }
 
@@ -24,27 +26,35 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSString *)appVersionDisplayString;
 - (NSString *)nightlyHash;
 
+- (NSString *)privatePrebootPath;
+- (NSString *)activePrebootPath;
+
 - (BOOL)isInstalledThroughTrollStore;
 - (BOOL)isJailbroken;
+- (BOOL)isJailbrokenWithOtherJailbreak;
 - (BOOL)isBootstrapped;
 - (NSString *)jailbrokenVersion;
+- (NSString *)systemVersion;
 
 - (BOOL)isSupported;
 - (BOOL)isArm64e;
+- (BOOL)isSPTM;
 - (NSString *)versionSupportString;
 - (NSString *)accessibleKernelPath;
-- (BOOL)isSPTM;
 - (NSString *)accessibleSPTMPath;
 - (NSString *)accessibleTXMPath;
 - (void)locateJailbreakRoot;
 - (NSError *)ensureJailbreakRootExists;
+- (NSError *)updateVarJbSymlink;
 
+- (void)setJailbroken:(BOOL)jailbroken withVersion:(nullable NSString *)version;
 
 - (void)runUnsandboxed:(void (^)(void))unsandboxBlock;
 - (void)runAsRoot:(void (^)(void))rootBlock;
 
 - (void)respring;
 - (void)rebootUserspace;
+- (void)rebuildIconCache;
 - (void)refreshJailbreakApps;
 - (void)reboot;
 - (void)changeMobilePassword:(NSString *)newPassword;
