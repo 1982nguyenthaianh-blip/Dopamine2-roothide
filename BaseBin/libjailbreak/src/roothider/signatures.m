@@ -11,39 +11,6 @@
 
 #define DEBUG_LOG(...) //JBLogDebug(__VA_ARGS__)
 
-MachO* fat_find_preferred_slice(Fat *fat)
-{
-	cpu_type_t cputype;
-	cpu_subtype_t cpusubtype;
-	if (host_get_cpu_information(&cputype, &cpusubtype) != 0) { return NULL; }
-	
-	MachO *candidateSlice = NULL;
-
-	if (cpusubtype == CPU_SUBTYPE_ARM64E) {
-		// New arm64e ABI
-		candidateSlice = fat_find_slice(fat, cputype, CPU_SUBTYPE_ARM64E | CPU_SUBTYPE_ARM64E_ABI_V2);
-		if (!candidateSlice) {
-			// Old arm64e ABI
-			candidateSlice = fat_find_slice(fat, cputype, CPU_SUBTYPE_ARM64E);
-			if (candidateSlice) {
-				// If we found an old arm64e slice, make sure this is a library! If it's a binary, skip!!!
-				// For binaries the system will fall back to the arm64 slice, which has the CDHash that we want to add
-				if (macho_get_filetype(candidateSlice) == MH_EXECUTE) candidateSlice = NULL;
-			}
-		}
-	}
-
-	if (!candidateSlice) {
-		// On iOS 15+ the kernels prefers ARM64_V8 to ARM64_ALL
-		candidateSlice = fat_find_slice(fat, cputype, CPU_SUBTYPE_ARM64_V8);
-		if (!candidateSlice) {
-			candidateSlice = fat_find_slice(fat, cputype, CPU_SUBTYPE_ARM64_ALL);
-		}
-	}
-
-	return candidateSlice;
-}
-
 extern bool csd_superblob_is_adhoc_signed(CS_DecodedSuperBlob *superblob);
 
 NSString* resolveLoaderExecutablePaths(NSString *loadPath, NSString *loaderPath, NSString *mainExecutablePath)
