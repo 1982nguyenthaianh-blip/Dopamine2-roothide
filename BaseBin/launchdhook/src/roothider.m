@@ -28,6 +28,17 @@ int __sysctl_hook(int *name, u_int namelen, void *oldp, size_t *oldlenp, const v
 int __sysctlbyname(const char *name, size_t namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
 int __sysctlbyname_hook(const char *name, size_t namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
 
+extern void draw_boot_logo(const char *bootLogoPath);
+int __sysctlbyname_launchd_hook(const char *name, size_t namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen)
+{
+	if (name) {
+		if ((namelen && !strncmp(name, "kern.willuserspacereboot", namelen)) || !strcmp(name, "kern.willuserspacereboot")) {
+			draw_boot_logo(JBROOT_PATH("/basebin/bootlogo.jp2"));
+		}
+	}
+	return __sysctlbyname_hook(name, namelen, oldp, oldlenp, newp, newlen);
+}
+
 /*
 int (*sysctlbyname_orig)(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
 int sysctlbyname_hook(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen)
@@ -142,7 +153,7 @@ void roothide_launchd_postinit(bool firstLoad)
 	{
 		orig_bind = bind;
 		litehook_hook_function((void *)__sysctl, (void *)__sysctl_hook);
-		litehook_hook_function((void *)__sysctlbyname, (void *)__sysctlbyname_hook);
+		litehook_hook_function((void *)__sysctlbyname, (void *)__sysctlbyname_launchd_hook);
 		litehook_hook_function((void *)bind, (void *)new_bind); //fix network issues on iOS16+
 	}
 #ifdef __arm64e__

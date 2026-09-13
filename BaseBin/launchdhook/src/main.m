@@ -142,8 +142,9 @@ __attribute__((constructor)) static void initializer(void)
 			remove("/var/mobile/Library/Preferences/com.apple.NanoRegistry.NRLaunchNotificationController.volatile.plist");
 		}
 
-		draw_boot_logo(JBROOT_PATH("/basebin/bootlogo.jp2"));
-		gFreeBootLogoBeforeBackboardd = YES;
+		/* In RootHide, draw_boot_logo is drawn during kern.willuserspacereboot sysctl BEFORE userspace reboot */
+		// draw_boot_logo(JBROOT_PATH("/basebin/bootlogo.jp2"));
+		// gFreeBootLogoBeforeBackboardd = YES;
 	}
 	else {
 		// Here we should have been injected into a live launchd on the fly
