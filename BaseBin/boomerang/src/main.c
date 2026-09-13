@@ -9,6 +9,7 @@
 #include <libjailbreak/jbserver_boomerang.h>
 #include <libjailbreak/stock_fixes.h>
 #include <libjailbreak/roothider.h>
+#include <libjailbreak/roothider/crashreporter.h>
 
 int main(int argc, char* argv[])
 {
