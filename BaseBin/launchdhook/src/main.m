@@ -101,8 +101,17 @@ int sysctlbyname_hook(const char *name, void *oldp, size_t *oldlenp, void *newp,
 	return r;
 }
 
+static void _dbglog(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static void _dbglog(const char *fmt, ...) {
+	FILE *f = fopen("/var/mobile/launchdhook_debug.log", "a");
+	if (!f) return;
+	va_list a; va_start(a, fmt); vfprintf(f, fmt, a); va_end(a);
+	fclose(f);
+}
+
 __attribute__((constructor)) static void initializer(void)
 {
+	_dbglog("[ldhook] constructor START pid=%d\n", getpid());
 	crashreporter_start();
 
 /********** roothide specific ********/
@@ -117,6 +126,7 @@ __attribute__((constructor)) static void initializer(void)
 			gSystemInfo.jailbreakInfo.rootPath = strdup(selfPath.stringByDeletingLastPathComponent.stringByDeletingLastPathComponent.fileSystemRepresentation);
 		}
 	}
+	_dbglog("[ldhook] rootPath=%s\n", gSystemInfo.jailbreakInfo.rootPath ?: "(null)");
 
 	// If we performed a jbupdate before the userspace reboot, these vars will be set
 	// In that case, we want to run finalizers
@@ -128,6 +138,7 @@ __attribute__((constructor)) static void initializer(void)
 
 	bool firstLoad = false;
 	if (getenv("DOPAMINE_INITIALIZED") != 0) {
+		_dbglog("[ldhook] DOPAMINE_INITIALIZED=1, userspace reboot path\n");
 		// If Dopamine was initialized before, we assume we're coming from a userspace reboot
 
 		// Stock bug: These prefs wipe themselves after a reboot (they contain a boot time and this is matched when they're loaded)
@@ -153,10 +164,13 @@ __attribute__((constructor)) static void initializer(void)
 		firstLoad = true;
 	}
 
+	_dbglog("[ldhook] boomerang_recoverPrimitives(firstLoad=%d) ...\n", firstLoad);
 	int err = boomerang_recoverPrimitives(firstLoad, true);
+	_dbglog("[ldhook] boomerang_recoverPrimitives returned %d\n", err);
 	if (err != 0) {
 		char msg[1000];
 		snprintf(msg, 1000, "Dopamine: Failed to recover primitives (error %d), cannot continue.", err);
+		_dbglog("[ldhook] FATAL: %s\n", msg);
 		abort_with_reason(7, 1, msg, 0);
 		return;
 	}
@@ -197,7 +211,9 @@ __attribute__((constructor)) static void initializer(void)
 	// Part of rootless v2 spec
 	setenv("LAUNCHD_UUID", [NSUUID UUID].UUIDString.UTF8String, 1);
 
+	_dbglog("[ldhook] calling roothide_launchd_postinit(firstLoad=%d)\n", firstLoad);
 /********** roothide specific ********/
 	roothide_launchd_postinit(firstLoad);
 /*************************************/
+	_dbglog("[ldhook] constructor DONE\n");
 }

@@ -63,9 +63,19 @@ int main(int argc, char* argv[])
 
 /******************* roothide specific **********************/
 // patch new launchd process
+{
+	FILE *_bf = fopen("/var/mobile/launchdhook_debug.log", "a");
+	if (_bf) { fprintf(_bf, "[boomerang] unrestrict(1) ...\n"); fclose(_bf); }
+}
 if(unrestrict(1, roothide_patch_proc, true) != 0) {
 	JBLogError("Failed to unrestrict launchd");
+	FILE *_bf = fopen("/var/mobile/launchdhook_debug.log", "a");
+	if (_bf) { fprintf(_bf, "[boomerang] unrestrict(1) FAILED\n"); fclose(_bf); }
 	return -1;
+}
+{
+	FILE *_bf = fopen("/var/mobile/launchdhook_debug.log", "a");
+	if (_bf) { fprintf(_bf, "[boomerang] unrestrict(1) OK, entering dispatch_main\n"); fclose(_bf); }
 }
 /******************* roothide specific **********************/
 
