@@ -623,11 +623,6 @@ extern CFTypeRef MGCopyAnswer(CFStringRef prop);
     return 0;
 }
 
-- (int)setPrivatePrebootProtected:(BOOL)protected
-{
-    return 0;
-}
-
 - (BOOL)isJailbreakHidden
 {
     return NO;
