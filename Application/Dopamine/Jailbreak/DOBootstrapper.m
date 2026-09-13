@@ -1420,6 +1420,11 @@ int getCFMajorVersion(void)
 {
     return nil;
 }
+- (NSError *)updateVarJbSymlink
+{
+    return nil;
+}
+
 @end
 
 /************************************** roothide specific *******************************************/

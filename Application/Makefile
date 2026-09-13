@@ -22,6 +22,8 @@ else
 build/Build/Products/Debug-iphoneos/Dopamine.app: FORCE
 	xcodebuild -scheme Dopamine -derivedDataPath build -destination 'generic/platform=iOS' CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
 endif
+	touch build/Build/Products/Debug-iphoneos/Dopamine.app/Dopamine.roothide
+	cp -a Dopamine/Resources/*.deb build/Build/Products/Debug-iphoneos/Dopamine.app/
 
 clean:
 	rm -rf build Payload Dopamine.ipa Dopamine.tipa
