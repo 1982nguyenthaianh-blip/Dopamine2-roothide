@@ -6,6 +6,7 @@
 
 #include <libjailbreak/libjailbreak.h>
 #include <libjailbreak/roothider.h>
+#include <libjailbreak/roothider/crashreporter.h>
 
 extern char **environ;
 

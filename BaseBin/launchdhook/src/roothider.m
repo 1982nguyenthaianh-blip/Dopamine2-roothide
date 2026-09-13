@@ -380,19 +380,19 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 	bool roothideBlacklisted = isBlacklistedPath(path);
 	if (choicyBlocked || roothideBlacklisted)
 	{
-		int ret;
+		int ret = 0;
 
 		JBLogDebug("blacklisted app %s", path);
 
 		if(dyld_patch_enabled() && iOS15Arm64e && roothideBlacklisted && (strstr(path, "/PlugIns/") || strstr(path, "/Extensions/") || strstr(path, ".appex/"))) {
-			JBLogDebug("prevent blacklisted app's extension from running: ", path);
-			ret = EPERM;
+			JBLogDebug("prevent blacklisted app's extension from running: %s", path);
+			return EPERM;
 		}
 		else if(dyld_patch_enabled() && iOS15Arm64e && roothideBlacklisted && (envbuf_getenv(envp, "ActivePrewarm") || envbuf_getenv(envp, "DYLD_USE_CLOSURES"))) {
-			JBLogDebug("prevent blacklisted app from prewarming: ", path);
-			ret = EPERM;
+			JBLogDebug("prevent blacklisted app from prewarming: %s", path);
+			return EPERM;
 		}
-		else
+
 		char **envc = envbuf_mutcopy((const char **)envp);
 
 		//choicy may set these 
@@ -447,10 +447,9 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 				platform_set_process_debugged(pid, false);
 			}
 		}
-	}
 
-	return ret;
-}
+		return ret;
+	}
 
 	if(launchdhookFirstLoad) 
 	{

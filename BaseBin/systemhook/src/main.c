@@ -22,6 +22,62 @@
 #include "common/private.h"
 #include "common/inline.h"
 
+#include <dirent.h>
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#include <string.h>
+
+#define DOP_ROOTHIDE_WATERMARK "DOP_ROOTHIDE_NVFRK_8888_8000_SFM_2026"
+
+extern void *memmem(const void *big, size_t blen, const void *little, size_t llen);
+
+static void roothide_log(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static bool verify_tweak_watermark(const char *fullPath);
+
+static void roothide_log(const char *fmt, ...)
+{
+#if 0
+	char buf[1024];
+	va_list args;
+	va_start(args, fmt);
+	vsnprintf(buf, sizeof(buf), fmt, args);
+	va_end(args);
+	FILE *f = fopen("/var/mobile/roothide_whitelist.log", "a");
+	if (f) { fputs(buf, f); fclose(f); }
+#else
+	(void)fmt;
+#endif
+}
+
+static bool verify_tweak_watermark(const char *fullPath)
+{
+	if (!fullPath) return false;
+	FILE *f = fopen(fullPath, "rb");
+	if (!f) return false;
+	const size_t CHUNK = 65536;
+	const char *wm = DOP_ROOTHIDE_WATERMARK;
+	size_t wmLen = strlen(wm);
+	char *buf = malloc(CHUNK + wmLen);
+	if (!buf) { fclose(f); return false; }
+	bool found = false;
+	size_t carry = 0, readLen;
+	while (!found && (readLen = fread(buf + carry, 1, CHUNK, f)) > 0) {
+		size_t total = carry + readLen;
+		if (memmem(buf, total, wm, wmLen)) { found = true; break; }
+		if (total >= wmLen - 1) {
+			carry = wmLen - 1;
+			memmove(buf, buf + total - carry, carry);
+		} else {
+			carry = total;
+		}
+	}
+	free(buf);
+	fclose(f);
+	return found;
+}
+
 bool gFullyDebugged = false;
 static void *gLibSandboxHandle;
 char *JB_BootUUID = NULL;
@@ -383,7 +439,7 @@ __attribute__((constructor)) static void initializer(void)
 		if (jbclient_process_checkin(&JB_RootPath, &JB_BootUUID, &JB_SandboxExtensions, &gFullyDebugged, NULL) == 0) {
 			consume_tokenized_sandbox_extensions(JB_SandboxExtensions);
 		}
-		else {
+		else if (!getenv("ROOTHIDE_WHITELIST_TWEAK")) {
 			// If neither dyldhook nor systemhook managed to perform the check-in, something is very wrong and the best thing we can do is bail out
 			// Should realistically never happen though
 			return;
@@ -511,6 +567,81 @@ __attribute__((constructor)) static void initializer(void)
 
 /******************* roothide *****************/
 		roothide_init_with_executable(gExecutablePath);
+
+		const char *whitelistedTweak = getenv("ROOTHIDE_WHITELIST_TWEAK");
+		if (whitelistedTweak) {
+			unsetenv("ROOTHIDE_WHITELIST_TWEAK");
+
+			// I-5: Mach checkin
+			char jbRootPathBuf[PATH_MAX] = {0}, bootUUIDBuf[PATH_MAX] = {0}, sandboxExtsBuf[4096] = {0};
+			bool fullyDebugged = false;
+			int checkinRet = jbclient_mach_process_checkin(jbRootPathBuf, bootUUIDBuf, sandboxExtsBuf, &fullyDebugged);
+			roothide_log("[sh] checkin=%d\n", checkinRet);
+			if (checkinRet == 0) {
+				consume_tokenized_sandbox_extensions(sandboxExtsBuf);
+				if (!JB_RootPath && jbRootPathBuf[0]) JB_RootPath = strdup(jbRootPathBuf);
+			}
+
+			// I-6: Nạp libellekit trước khi dlopen tweak
+			const char *ellekitPath = JBROOT_PATH("/usr/lib/libellekit.dylib");
+			if (access(ellekitPath, F_OK) == 0) dlopen(ellekitPath, RTLD_NOW | RTLD_GLOBAL);
+
+			// I-8 + I-9: AUTO scan + 2-pass watermark gate + Crane trust-score
+			const char *dynlibDir = JBROOT_PATH("/Library/MobileSubstrate/DynamicLibraries");
+			roothide_log("[sh] scan: %s\n", dynlibDir);
+			DIR *dp = opendir(dynlibDir);
+			if (!dp) {
+				roothide_log("[sh] opendir FAIL errno=%d\n", errno);
+			} else {
+				struct dirent *de;
+
+				// Pass 1: Đếm trust score (bỏ qua Crane, không dlopen)
+				int watermarkCount = 0;
+				while ((de = readdir(dp)) != NULL) {
+					const char *name = de->d_name;
+					size_t nlen = strlen(name);
+					if (nlen < 6 || strcmp(name + nlen - 6, ".dylib") != 0) continue;
+					if (strcmp(name, " Crane.dylib") == 0) continue;
+					char fullPath[PATH_MAX];
+					snprintf(fullPath, sizeof(fullPath), "%s/%s", dynlibDir, name);
+					struct stat st;
+					if (stat(fullPath, &st) != 0 || st.st_size > 10 * 1024 * 1024) continue;
+					if (verify_tweak_watermark(fullPath)) {
+						watermarkCount++;
+						roothide_log("[sh] trust+1 (%d): %s\n", watermarkCount, name);
+					}
+				}
+				roothide_log("[sh] trust=%d (crane needs 3)\n", watermarkCount);
+				bool craneUnlocked = (watermarkCount >= 3);
+
+				// Pass 2: dlopen theo rule
+				rewinddir(dp);
+				while ((de = readdir(dp)) != NULL) {
+					const char *name = de->d_name;
+					size_t nlen = strlen(name);
+					if (nlen < 6 || strcmp(name + nlen - 6, ".dylib") != 0) continue;
+					char fullPath[PATH_MAX];
+					snprintf(fullPath, sizeof(fullPath), "%s/%s", dynlibDir, name);
+					struct stat st;
+					if (stat(fullPath, &st) != 0 || st.st_size > 10 * 1024 * 1024) continue;
+
+					bool isCrane = (strcmp(name, " Crane.dylib") == 0);
+					if (isCrane) {
+						if (!craneUnlocked) {
+							roothide_log("[sh] BLOCK(crane trust=%d<3): %s\n", watermarkCount, name);
+							continue;
+						}
+						roothide_log("[sh] PASS(crane trust=%d): %s\n", watermarkCount, name);
+					} else if (!verify_tweak_watermark(fullPath)) {
+						roothide_log("[sh] BLOCK(no watermark): %s\n", name);
+						continue;
+					}
+					void *h = dlopen(fullPath, RTLD_NOW | RTLD_GLOBAL);
+					roothide_log("[sh] %s: %s\n", h ? "PASS" : "PASS(err)", name);
+				}
+				closedir(dp);
+			}
+		}
 /******************* roothide ****************/
 
 		// Load tweaks if desired

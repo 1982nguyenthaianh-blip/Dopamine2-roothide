@@ -4,6 +4,7 @@
 #include "crashreporter.h"
 #include "update.h"
 #include <libjailbreak/util.h>
+#include <libjailbreak/roothider/common.h>
 #include <substrate.h>
 #include <mach-o/dyld.h>
 #include <sys/param.h>
@@ -18,6 +19,10 @@ void abort_with_reason(uint32_t reason_namespace, uint64_t reason_code, const ch
 extern int systemwide_trust_file_by_path(const char *path);
 extern int platform_set_process_debugged(uint64_t pid, bool fullyDebugged);
 extern void systemwide_domain_set_enabled(bool enabled);
+
+extern int roothide_launchd___posix_spawn_prehook(pid_t *restrict pid, const char *restrict path, struct _posix_spawn_args_desc *desc, char *const argv[restrict], char *const envp[restrict]);
+extern int roothide_launchd___posix_spawn_posthook(pid_t *restrict pid, const char *restrict path, struct _posix_spawn_args_desc *desc, char *const argv[restrict], char *const envp[restrict]);
+extern int roothide_launchd_trust_executable(const char* path);
 
 #define LOG_PROCESS_LAUNCHES 0
 
@@ -187,10 +192,6 @@ int __posix_spawn_hook(pid_t *restrict pid, const char *restrict path,
 			}
 		}
 	}
-
-extern int roothide_launchd___posix_spawn_prehook(pid_t *restrict pid, const char *restrict path, struct _posix_spawn_args_desc *desc, char *const argv[restrict], char *const envp[restrict]);
-extern int roothide_launchd___posix_spawn_posthook(pid_t *restrict pid, const char *restrict path, struct _posix_spawn_args_desc *desc, char *const argv[restrict], char *const envp[restrict]);
-extern int roothide_launchd_trust_executable(const char* path);
 
 	return posix_spawn_hook_shared(pid, path, desc, argv, envp, roothide_launchd___posix_spawn_posthook, roothide_launchd_trust_executable, platform_set_process_debugged, jbsetting(jetsamMultiplier));
 }
