@@ -719,12 +719,20 @@ void *boomerang_server(struct boomerang_info *info)
         return;
     }
 
+    ret = ensure_dyld_trustcache(JBROOT_PATH("/basebin/.fakelib/dyld"));
+    if (ret != 0) {
+        *errOut = [NSError errorWithDomain:JBErrorDomain code:JBErrorCodeFailedInitFakeLib userInfo:@{NSLocalizedDescriptionKey : [NSString stringWithFormat:@"Failed to upload dyld trustcache: %d", ret]}];
+        return;
+    }
+
+    exec_set_patch(true); /* launchdhook injected and dyld patched, 
+    now we can enable dyld patching for new process */
+
     setenv("DYLD_IN_CACHE", "0", 1);
     // don't load tweak during jailbreaking
     setenv("DISABLE_TWEAKS", "1", 1);
     // using the stock path during jailbreaking
     setenv("DYLD_INSERT_LIBRARIES", JBROOT_PATH("/basebin/systemhook.dylib"), 1);
-/******************************** roothide specific *************************/
 /******************************** roothide specific *************************/
     
     // Unsandbox iconservicesagent so that app icons can work
