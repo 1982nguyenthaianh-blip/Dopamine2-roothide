@@ -596,9 +596,13 @@ void *boomerang_server(struct boomerang_info *info)
 - (void)runWithError:(NSError **)errOut didRemoveJailbreak:(BOOL*)didRemove showLogs:(BOOL *)showLogs
 {
 /****************** roothide specific ****************/
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [[UIApplication sharedApplication] setIdleTimerDisabled:YES];
-    });
+    Class uiAppClass = NSClassFromString(@"UIApplication");
+    if (uiAppClass) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            id app = [uiAppClass performSelector:@selector(sharedApplication)];
+            [app performSelector:@selector(setIdleTimerDisabled:) withObject:(__bridge id)(void*)1];
+        });
+    }
 
     exec_set_patch(false);
 /****************** roothide specific ****************/
@@ -881,7 +885,8 @@ void *boomerang_server(struct boomerang_info *info)
     uint8_t uaf_xpc[1024];
     memset(uaf_xpc, 0x41, 1024);
     xpc_dictionary_set_value(message, "ool", xpc_data_create(uaf_xpc, 1024));
-    xpc_connection_send_message_with_reply_sync(client, message);
+    xpc_object_t reply = xpc_connection_send_message_with_reply_sync(client, message);
+    (void)reply;
     return 0;
 }
 
