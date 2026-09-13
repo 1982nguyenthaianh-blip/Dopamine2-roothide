@@ -9,7 +9,9 @@
 
 #import <Foundation/Foundation.h>
 
-void abort_with_reason(uint32_t reason_namespace, uint64_t reason_code, const char *reason_string, uint64_t reason_flags);
+//void abort_with_reason(uint32_t reason_namespace, uint64_t reason_code, const char *reason_string, uint64_t reason_flags);
+extern void launchd_panic(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
+#define abort_with_reason(reason_namespace,reason_code,reason_string,reason_flags)  launchd_panic("%s",reason_string)
 
 int jbupdate_basebin(const char *basebinTarPath)
 {
@@ -144,6 +146,16 @@ void jbupdate_update_system_info(void)
 			if (xpf_set_is_supported("perfkrw")) {
 				sets[idx++] = "perfkrw";
 			}
+
+/********************** roothide *************************/
+			sets[idx++] = "namecache";
+
+			if (xpf_set_is_supported("amfi_oids")) {
+				sets[idx++] = "amfi_oids";
+			}
+
+			sets[idx] = NULL;
+/********************** roothide *************************/
 
 			newSystemInfoXdict = xpf_construct_offset_dictionary((const char **)sets);
 			if (!newSystemInfoXdict) {

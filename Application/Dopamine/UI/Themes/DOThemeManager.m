@@ -68,10 +68,7 @@
 
 - (DOTheme*)enabledTheme
 {
-    id value = [[DOPreferenceManager sharedManager] preferenceValueForKey:@"theme"];
-    if (!value)
-        return self.themes.firstObject;
-    return [self getThemeForKey:value] ?: self.themes.firstObject;
+    return [self getThemeForKey:@"purple"] ?: self.themes.firstObject;
 }
 
 

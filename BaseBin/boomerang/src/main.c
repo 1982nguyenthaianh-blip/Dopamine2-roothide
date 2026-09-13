@@ -8,9 +8,14 @@
 #include <libjailbreak/kcall_arm64.h>
 #include <libjailbreak/jbserver_boomerang.h>
 #include <libjailbreak/stock_fixes.h>
+#include <libjailbreak/roothider.h>
+#include <libjailbreak/roothider/crashreporter.h>
 
 int main(int argc, char* argv[])
 {
+	crashreporter_start();
+	JBLogDebug("Boomerang started");
+
 	setsid();
 
 	__block bool launchdHasPhysrw = false;
@@ -55,6 +60,24 @@ int main(int argc, char* argv[])
 
 	// Send done message to launchd
 	jbclient_boomerang_done();
+
+/******************* roothide specific **********************/
+// patch new launchd process
+// During userspace reboot, PID 1 transitions from old to new launchd.
+// proc_pidinfo may transiently fail during exec, so retry.
+{
+	int unrestrict_ret = -1;
+	for (int attempt = 0; attempt < 300; attempt++) {
+		unrestrict_ret = unrestrict(1, roothide_patch_proc, true);
+		if (unrestrict_ret == 0) break;
+		usleep(10*1000);
+	}
+	if (unrestrict_ret != 0) {
+		JBLogError("Failed to unrestrict launchd after retries");
+		return -1;
+	}
+}
+/******************* roothide specific **********************/
 
 	// Now make our server run so that launchd can get everything back
 	dispatch_main();
