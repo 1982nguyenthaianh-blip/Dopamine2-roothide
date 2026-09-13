@@ -122,6 +122,13 @@ int __posix_spawn_hook(pid_t *restrict pid, const char *restrict path,
 				unsetenv("STAGED_JAILBREAK_UPDATE");
 			}
 
+			// RootHide: start new launchd suspended so boomerang can patch dyld before it processes DYLD_INSERT_LIBRARIES
+			if (desc && desc->attrp) {
+				short flags = 0;
+				posix_spawnattr_getflags(&desc->attrp, &flags);
+				posix_spawnattr_setflags(&desc->attrp, flags | POSIX_SPAWN_START_SUSPENDED);
+			}
+
 			// Always use environ instead of envp, as boomerang_stashPrimitives calls setenv
 			// setenv / unsetenv can sometimes cause environ to get reallocated
 			// In that case envp may point to garbage or be empty
