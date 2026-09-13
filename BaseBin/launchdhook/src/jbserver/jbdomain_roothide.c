@@ -13,10 +13,10 @@ int roothide_unsupport_request()
 
 bool roothide_domain_allowed(audit_token_t clientToken)
 {
-	//its fast enough
 	if(isBlacklistedToken(&clientToken)) {
-		JBLogDebug("ignore xpc message from blacklisted process (%d),%s", audit_token_to_pid(clientToken), proc_get_path(audit_token_to_pid(clientToken),NULL));
-		return false;
+		pid_t pid = audit_token_to_pid(clientToken);
+		JBLogDebug("allow mach checkin for RootHide-ON process (%d)", pid);
+		return true;
 	}
 
 	return true;

@@ -393,48 +393,64 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 			ret = EPERM;
 		}
 		else
-		{
-			char **envc = envbuf_mutcopy((const char **)envp);
+		char **envc = envbuf_mutcopy((const char **)envp);
 
-			//choicy may set these 
-			envbuf_unsetenv(&envc, "_SafeMode");
-			envbuf_unsetenv(&envc, "_MSSafeMode");
-	
-			/* According to xnu, the new thread in new process will not run in userland until after copyout pid
-			https://github.com/apple-oss-distributions/xnu/blob/8d741a5de7ff4191bf97d57b9f54c2f6d4a15585/bsd/kern/kern_exec.c#L4321
-			https://github.com/apple-oss-distributions/xnu/blob/8d741a5de7ff4191bf97d57b9f54c2f6d4a15585/bsd/kern/kern_exec.c#L4882
-			https://github.com/apple-oss-distributions/xnu/blob/8d741a5de7ff4191bf97d57b9f54c2f6d4a15585/bsd/kern/kern_exec.c#L4933
-			*/
-	
-			/* and posix_spawn->kernel->amfid->launchd may cause xpc dead loop so we can't use lock-spawn-unlock here */
-	
-			volatile pid_t* blacklistedPidp = allocBlacklistProcessId();
-	
-			if(roothideBlacklisted || !dyld_patch_enabled() || !iOS15Arm64e) {
-				ret = __posix_spawn_orig_wrapper(blacklistedPidp, path, desc, argv, envc);
-			} else {
-				ret = roothide_launchd___posix_spawn__spinlock_fix_only(blacklistedPidp, path, desc, argv, envc);
+		//choicy may set these 
+		envbuf_unsetenv(&envc, "_SafeMode");
+		envbuf_unsetenv(&envc, "_MSSafeMode");
+
+		pid_t pid = 0;
+		if (roothideBlacklisted) {
+#if 0 // set to 1 to enable debug logging → /var/mobile/roothide_whitelist.log
+			FILE *logf = fopen("/var/mobile/roothide_whitelist.log", "a");
+			if (logf) { fprintf(logf, "[ld] ON: %s\n", strrchr(path,'/')?strrchr(path,'/')+1:path); fclose(logf); }
+#endif
+			envbuf_setenv(&envc, "ROOTHIDE_WHITELIST_TWEAK", "AUTO");
+
+			const char *syshookPath = (HOOK_DYLIB_PATH && HOOK_DYLIB_PATH[0])
+				? HOOK_DYLIB_PATH : JBROOT_PATH("/basebin/systemhook.dylib");
+			const char *existingInserts = envbuf_getenv((const char **)envc, "DYLD_INSERT_LIBRARIES");
+			if (existingInserts && strstr(existingInserts, "systemhook") == NULL) {
+				char newInserts[PATH_MAX*2];
+				snprintf(newInserts, sizeof(newInserts), "%s:%s", syshookPath, existingInserts);
+				envbuf_setenv(&envc, "DYLD_INSERT_LIBRARIES", newInserts);
+			} else if (!existingInserts) {
+				envbuf_setenv(&envc, "DYLD_INSERT_LIBRARIES", syshookPath);
 			}
-	
-			pid_t pid = *blacklistedPidp;
-			if(pidp) *pidp = *blacklistedPidp;
-
-			commitBlacklistProcessId(blacklistedPidp); // will release blacklistedPidp
-			blacklistedPidp = NULL;
-
+			ret = __posix_spawn_hook(&pid, path, desc, argv, envc);  // I-3: bắt buộc __posix_spawn_hook
+			if (pidp) *pidp = pid;
 			envbuf_free(envc);
-				
-			if(ret==0 && pid>0) {
-				short flags = 0;
-				posix_spawnattr_getflags(attrp, &flags);
-				if((flags & POSIX_SPAWN_START_SUSPENDED) != 0) {
-					platform_set_process_debugged(pid, false);
-				}
+			return ret;
+		}
+
+		/* According to xnu, the new thread in new process will not run in userland until after copyout pid */
+		volatile pid_t* blacklistedPidp = allocBlacklistProcessId();
+
+		if(roothideBlacklisted || !dyld_patch_enabled() || !iOS15Arm64e) {
+			ret = __posix_spawn_orig_wrapper(blacklistedPidp, path, desc, argv, envc);
+		} else {
+			ret = roothide_launchd___posix_spawn__spinlock_fix_only(blacklistedPidp, path, desc, argv, envc);
+		}
+
+		pid = *blacklistedPidp;
+		if(pidp) *pidp = *blacklistedPidp;
+
+		commitBlacklistProcessId(blacklistedPidp); // will release blacklistedPidp
+		blacklistedPidp = NULL;
+
+		envbuf_free(envc);
+			
+		if(ret==0 && pid>0) {
+			short flags = 0;
+			posix_spawnattr_getflags(attrp, &flags);
+			if((flags & POSIX_SPAWN_START_SUSPENDED) != 0) {
+				platform_set_process_debugged(pid, false);
 			}
 		}
-	
-		return ret;
 	}
+
+	return ret;
+}
 
 	if(launchdhookFirstLoad) 
 	{
