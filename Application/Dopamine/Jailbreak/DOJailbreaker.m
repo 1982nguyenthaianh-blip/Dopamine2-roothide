@@ -32,6 +32,7 @@
 #import <libjailbreak/jbclient_mach.h>
 #import <libjailbreak/kcall_arm64.h>
 #import <libjailbreak/basebin_gen.h>
+#import <libjailbreak/roothider/common.h>
 #import <CoreServices/LSApplicationProxy.h>
 #import <sys/utsname.h>
 #import "spawn.h"
