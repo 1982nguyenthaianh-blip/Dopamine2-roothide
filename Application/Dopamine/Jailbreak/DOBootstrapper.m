@@ -743,7 +743,7 @@ typedef NS_ENUM(NSInteger, JBErrorCode) {
 ////////////////////////
 uint64_t jbrand_new();
 uint64_t jbrand_current();
-int is_jbroot_name(char* name);
+int is_jbroot_name(const char* name);
 NSString* find_jbroot(BOOL force);
 ////////////////////////////////////////
 NSString* jbrootPrefix(NSString *path);
@@ -766,7 +766,7 @@ int is_jbrand_value(uint64_t value)
 #define JB_ROOT_PREFIX ".jbroot-"
 #define JB_RAND_LENGTH  (sizeof(uint64_t)*sizeof(char)*2)
 
-int is_jbroot_name(char* name)
+int is_jbroot_name(const char* name)
 {
     if(strlen(name) != (sizeof(JB_ROOT_PREFIX)-1+JB_RAND_LENGTH))
         return 0;
@@ -1388,7 +1388,7 @@ int getCFMajorVersion(void)
     NSFileManager* fm = NSFileManager.defaultManager;
     
     NSString* dirpath = @"/var/containers/Bundle/Application/";
-    for(NSString* item in [fm directoryContentsAtPath:dirpath])
+    for(NSString* item in [fm contentsOfDirectoryAtPath:dirpath error:nil])
     {
         if(is_jbroot_name(item.UTF8String)) {
             STRAPLOG("remove %@ @ %@", item, dirpath);
@@ -1398,7 +1398,7 @@ int getCFMajorVersion(void)
     }
     
     dirpath = @"/var/mobile/Containers/Shared/AppGroup/";
-    for(NSString* item in [fm directoryContentsAtPath:dirpath])
+    for(NSString* item in [fm contentsOfDirectoryAtPath:dirpath error:nil])
     {
         if(is_jbroot_name(item.UTF8String)) {
             STRAPLOG("remove %@ @ %@", item, dirpath);

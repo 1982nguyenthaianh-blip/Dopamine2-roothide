@@ -146,7 +146,7 @@ void roothide_launchd_postinit(bool firstLoad)
 		assert(unsandbox("/usr/lib", systemhookFilePath.fileSystemRepresentation) == 0);
 
 		//new "real path"
-		asprintf(&HOOK_DYLIB_PATH, "/usr/lib/systemhook-%016llX.dylib", jbinfo(jbrand));
+		asprintf((char **)&HOOK_DYLIB_PATH, "/usr/lib/systemhook-%016llX.dylib", jbinfo(jbrand));
 	}
 
 	if (__builtin_available(iOS 16.0, *))
@@ -249,7 +249,7 @@ int roothide_launchd___posix_spawn_posthook(pid_t *restrict pidp, const char *re
 	// on some devices dyldhook may fail due to vm_protect(VM_PROT_READ|VM_PROT_WRITE), 2, (os/kern) protection failure in dsc::__DATA_CONST:__const, 
 	// so we need to disable dyld-in-cache here. (or we can use VM_PROT_READ|VM_PROT_WRITE|VM_PROT_COPY)
 	char **envc = envbuf_mutcopy((const char **)envp);
-	if(envbuf_getenv(envc, "DYLD_INSERT_LIBRARIES")) {
+	if(envbuf_getenv((const char **)envc, "DYLD_INSERT_LIBRARIES")) {
 		envbuf_setenv(&envc, "DYLD_IN_CACHE", "0");
 	}
 
@@ -382,7 +382,7 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 	if (!__builtin_available(iOS 16.0, *))
 	{
 		iOS15Arm64e = true;
-		if(envbuf_getenv(envp, "_SafeMode") || envbuf_getenv(envp, "_MSSafeMode")) {
+		if(envbuf_getenv((const char **)envp, "_SafeMode") || envbuf_getenv((const char **)envp, "_MSSafeMode")) {
 			if(path && isRemovableBundlePath(path) && !hasTrollstoreMarker(path)) {
 				choicyBlocked = true;
 			}
