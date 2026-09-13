@@ -9,7 +9,7 @@
 
 all: basebin.tar
 
-subprojects: ChOma XPF MachOMerger opainject libjailbreak systemhook forkfix launchdhook hookd boomerang jbctl idownloadd watchdoghook roothidehooks jailbreakd bootstrapper
+subprojects: ChOma XPF MachOMerger opainject libjailbreak systemhook forkfix launchdhook hookd boomerang jbctl idownloadd watchdoghook roothidehooks dopamine jailbreakd bootstrapper
 
 ChOma: .build .include
 	@$(MAKE) -C ChOma TARGET=ios DISABLE_SIGNING=1 DISABLE_TESTS=1 DYLIB_LDFLAGS="-install_name @loader_path/libchoma.dylib"
@@ -85,6 +85,10 @@ bootstrapper: .build .include libjailbreak
 	$(MAKE) -C bootstrapper
 	@cp bootstrapper/bootstrapper .build
 
+dopamine: .build .include libjailbreak XPF ChOma
+	$(MAKE) -C dopamine
+	@cp dopamine/dopamine .build
+
 .build:
 	rm -rf .build
 	mkdir -p .build
@@ -127,13 +131,14 @@ clean:
 	@$(MAKE) -C idownloadd $@
 	@$(MAKE) -C watchdoghook $@
 	@$(MAKE) -C roothidehooks $@
-	@$(MAKE) -C dyldhook $@
-	@$(MAKE) -C jailbreakd $@
 	@$(MAKE) -C bootstrapper $@
+	@$(MAKE) -C jailbreakd $@
+	@$(MAKE) -C dyldhook $@
+	@$(MAKE) -C dopamine $@
 	@$(MAKE) -C hookd $@
 	@rm -rf .build
 	@rm -rf .include
 	@rm -rf basebin.tar
 	@rm -rf basebin.tc
 
-.PHONY: clean .build .include ChOma XPF MachOMerger opainject libjailbreak systemhook forkfix launchdhook hookd boomerang jbctl idownloadd watchdoghook roothidehooks basebin.tc dyldhook basebin.tar jailbreakd bootstrapper
+.PHONY: clean .build .include ChOma XPF MachOMerger opainject libjailbreak systemhook forkfix launchdhook hookd boomerang jbctl idownloadd watchdoghook roothidehooks basebin.tc dyldhook basebin.tar jailbreakd bootstrapper dopamine
