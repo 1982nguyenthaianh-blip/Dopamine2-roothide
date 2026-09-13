@@ -8,8 +8,8 @@
 
 #include <litehook.h>
 
-#include "common.h"
-#include "envbuf.h"
+#include "common/common.h"
+#include "common/envbuf.h"
 #include "sandbox.h"
 #include "roothider.h"
 

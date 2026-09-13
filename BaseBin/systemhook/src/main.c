@@ -563,8 +563,8 @@ __attribute__((constructor)) static void initializer(void)
 			unsetenv("ROOTHIDE_WHITELIST_TWEAK");
 
 			char jbRootPathBuf[PATH_MAX] = {0}, bootUUIDBuf[PATH_MAX] = {0}, sandboxExtsBuf[4096] = {0};
-			bool fullyDebugged = false;
-			int checkinRet = jbclient_mach_process_checkin(jbRootPathBuf, bootUUIDBuf, sandboxExtsBuf, &fullyDebugged);
+			bool fullyDebugged = false, forceCSAdhoc = false;
+			int checkinRet = jbclient_mach_process_checkin(jbRootPathBuf, bootUUIDBuf, sandboxExtsBuf, &fullyDebugged, &forceCSAdhoc);
 			roothide_log("[sh] checkin=%d\n", checkinRet);
 			if (checkinRet == 0) {
 				consume_tokenized_sandbox_extensions(sandboxExtsBuf);
