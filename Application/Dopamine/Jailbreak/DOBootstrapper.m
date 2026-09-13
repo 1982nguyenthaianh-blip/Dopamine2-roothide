@@ -1403,28 +1403,4 @@ int getCFMajorVersion(void)
 
 @end
 
-/////////////////////////////////////////////////////////////////
-
-@implementation DOEnvironmentManager(roothide)
-- (void)locateJailbreakRoot
-{
-    if(gSystemInfo.jailbreakInfo.rootPath) free(gSystemInfo.jailbreakInfo.rootPath);
-    
-    NSString* jbroot_path = find_jbroot(YES);
-    if(jbroot_path) {
-        gSystemInfo.jailbreakInfo.rootPath = strdup(jbroot_path.fileSystemRepresentation);
-        gSystemInfo.jailbreakInfo.jbrand = jbrand_current();
-    }
-}
-- (NSError *)ensureJailbreakRootExists
-{
-    return nil;
-}
-- (NSError *)updateVarJbSymlink
-{
-    return nil;
-}
-
-@end
-
 /************************************** roothide specific *******************************************/

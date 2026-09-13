@@ -104,12 +104,26 @@ extern CFTypeRef MGCopyAnswer(CFStringRef prop);
     return [@"/private/preboot" stringByAppendingPathComponent:[self bootManifestHash].hexString];
 }
 
+NSString* find_jbroot(BOOL force);
+uint64_t jbrand_current(void);
+
 - (void)locateJailbreakRoot
 {
-    // RootHide manages rootPath via find_jbroot() / jbclient_get_jbroot()
+    if (gSystemInfo.jailbreakInfo.rootPath) free(gSystemInfo.jailbreakInfo.rootPath);
+    
+    NSString* jbroot_path = find_jbroot(YES);
+    if (jbroot_path) {
+        gSystemInfo.jailbreakInfo.rootPath = strdup(jbroot_path.fileSystemRepresentation);
+        gSystemInfo.jailbreakInfo.jbrand = jbrand_current();
+    }
 }
 
 - (NSError *)ensureJailbreakRootExists
+{
+    return nil;
+}
+
+- (NSError *)updateVarJbSymlink
 {
     return nil;
 }
