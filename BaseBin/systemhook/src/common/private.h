@@ -3,16 +3,36 @@
 
 #include <mach-o/dyld.h>
 
+#ifndef SYS_ptrace
 #define SYS_ptrace 0x1A
+#endif
+#ifndef SYS_execve
 #define SYS_execve 0x3B
+#endif
+#ifndef SYS_posix_spawn
 #define SYS_posix_spawn 0xF4
+#endif
+#ifndef SYS_csops
 #define SYS_csops 0xA9
+#endif
+#ifndef SYS_csops_audittoken
 #define SYS_csops_audittoken 0xAA
+#endif
+#ifndef SYS_necp_match_policy
 #define SYS_necp_match_policy 0x1CC
+#endif
+#ifndef SYS_necp_open
 #define SYS_necp_open 0x1F5
+#endif
+#ifndef SYS_necp_client_action
 #define SYS_necp_client_action 0x1F6
+#endif
+#ifndef SYS_necp_session_open
 #define SYS_necp_session_open 0x20A
+#endif
+#ifndef SYS_necp_session_action
 #define SYS_necp_session_action 0x20B
+#endif
 
 int necp_match_policy(uint8_t *parameters, size_t parameters_size, void *returned_result);
 int necp_open(int flags);
@@ -21,8 +41,12 @@ int necp_session_open(int flags);
 int necp_session_action(int necp_fd, uint32_t action, uint8_t *in_buffer, size_t in_buffer_length, uint8_t *out_buffer, size_t out_buffer_length);
 
 int ptrace(int request, pid_t pid, caddr_t addr, int data);
+#ifndef PT_ATTACH
 #define PT_ATTACH       10      /* trace some running process */
+#endif
+#ifndef PT_ATTACHEXC
 #define PT_ATTACHEXC    14      /* attach to running process with signal exception */
+#endif
 
 extern kern_return_t mach_vm_protect(vm_map_t target_task, mach_vm_address_t address, mach_vm_size_t size, boolean_t set_maximum, vm_prot_t new_protection);
 extern kern_return_t _kernelrpc_mach_vm_protect_trap(mach_port_name_t target, mach_vm_address_t address, mach_vm_size_t size, boolean_t set_maximum, vm_prot_t new_protection);

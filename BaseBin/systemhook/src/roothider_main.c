@@ -170,34 +170,15 @@ void redirect_paths(const char* rootdir)
 }
 
 
-kSpawnConfig spawn_config_for_executable(const char* path, char *const argv[restrict]);
-void string_enumerate_components(const char *string, const char *separator, void (^enumBlock)(const char *pathString, bool *stop));
-
-void trust_insert_libraries(char** envc)
-{
-	const char* DYLD_INSERT_LIBRARIES = envbuf_getenv(envc, "DYLD_INSERT_LIBRARIES");
-	if(!DYLD_INSERT_LIBRARIES) return;
-
-	string_enumerate_components(DYLD_INSERT_LIBRARIES, ":", ^(const char *path, bool *stop) {
-		if (strcmp(path, HOOK_DYLIB_PATH) != 0) {
-			jbclient_trust_library_recurse(path, NULL);
-		}
-	});
-}
-
 int __no_need_to_trust_now__(const char* path)
 {
 	return 0;
 }
 
-#define NBINPREFS       4
-#define POSIX_SPAWN_PROC_TYPE_DRIVER 0x700
-int posix_spawnattr_getprocesstype_np(const posix_spawnattr_t * __restrict, int * __restrict) __API_AVAILABLE(macos(10.8), ios(6.0));
-
 int roothide_systemhook___posix_spawn_prehook(pid_t *restrict pidp, const char *restrict path, struct _posix_spawn_args_desc *desc, char *const argv[restrict], char *const envp[restrict], void *orig, int (*trust_binary)(const char *path), int (*set_process_debugged)(uint64_t pid, bool fullyDebugged), double jetsamMultiplier)
 {
 	if(!path) { //Don't crash here due to bad posix_spawn call
-		return __posix_spawn_orig(pidp, path, desc, argv, envp);
+		return ((int (*)(pid_t *restrict, const char *restrict, struct _posix_spawn_args_desc *, char *const[restrict], char *const[restrict]))orig)(pidp, path, desc, argv, envp);
 	}
 
 	if(!desc || !desc->attrp) {
@@ -214,112 +195,6 @@ int roothide_systemhook___posix_spawn_prehook(pid_t *restrict pidp, const char *
 	}
 
 	return posix_spawn_hook_shared(pidp, path, desc, argv, envp, orig, trust_binary, set_process_debugged, jetsamMultiplier);
-}
-
-int roothide_systemhook___posix_spawn_posthook(pid_t *restrict pidp, const char *restrict path, struct _posix_spawn_args_desc *desc, char *const argv[restrict], char *const envp[restrict])
-{
-	posix_spawnattr_t attrp = &desc->attrp;
-
-	kSpawnConfig spawnConfig = 0;
-	if(!jbclient_dyld_patch_enabled())
-	{
-		spawnConfig = spawn_config_for_executable(path, argv);
-
-		if (spawnConfig & kSpawnConfigTrust) {
-			size_t outCount = 0;
-			bool preferredArchsSet = false;
-			cpu_type_t preferredTypes[NBINPREFS] = {0};
-			cpu_subtype_t preferredSubtypes[NBINPREFS] = {0};
-			if (posix_spawnattr_getarchpref_np(attrp, 4, preferredTypes, preferredSubtypes, &outCount) == 0) {
-				for (size_t i = 0; i < outCount; i++) {
-					if (preferredTypes[i] != 0 || preferredSubtypes[i] != UINT32_MAX) {
-						preferredArchsSet = true;
-						break;
-					}
-				}
-			}
-
-			xpc_object_t preferredArchsArray = NULL;
-			if (preferredArchsSet) {
-				preferredArchsArray = xpc_array_create_empty();
-				for (size_t i = 0; i < outCount; i++) {
-					xpc_object_t curArch = xpc_dictionary_create_empty();
-					xpc_dictionary_set_uint64(curArch, "type", preferredTypes[i]);
-					xpc_dictionary_set_uint64(curArch, "subtype", preferredSubtypes[i]);
-					xpc_array_set_value(preferredArchsArray, XPC_ARRAY_APPEND, curArch);
-					xpc_release(curArch);
-				}
-			}
-
-			// Upload binary to trustcache if needed
-			jbclient_trust_executable_recurse(path, preferredArchsArray);
-
-			if (preferredArchsArray) {
-				xpc_release(preferredArchsArray);
-			}
-		}
-	}
-
-	short flags = 0;
-	posix_spawnattr_getflags(attrp, &flags);
-
-	int proctype = 0;
-	posix_spawnattr_getprocesstype_np(attrp, &proctype);
-
-	bool should_suspend = (proctype != POSIX_SPAWN_PROC_TYPE_DRIVER);
-	bool should_resume = should_suspend && (flags & POSIX_SPAWN_START_SUSPENDED)==0;
-	bool patch_exec = should_suspend && (flags & POSIX_SPAWN_SETEXEC) != 0;
-
-	if (should_suspend) {
-		posix_spawnattr_setflags(attrp, flags | POSIX_SPAWN_START_SUSPENDED);
-	}
-
-	if (patch_exec) {
-		if (jbdSpawnExecStart(path, should_resume) != 0) { // jdb fault?
-			//restore flags
-			posix_spawnattr_setflags(attrp, flags);
-			return 201;
-		}
-	}
-
-	// on some devices dyldhook may fail due to vm_protect(VM_PROT_READ|VM_PROT_WRITE), 2, (os/kern) protection failure in dsc::__DATA_CONST:__const, 
-	// so we need to disable dyld-in-cache here. (or we can use VM_PROT_READ|VM_PROT_WRITE|VM_PROT_COPY)
-	char **envc = envbuf_mutcopy((const char **)envp);
-	if(envbuf_getenv(envc, "DYLD_INSERT_LIBRARIES")) {
-		envbuf_setenv(&envc, "DYLD_IN_CACHE", "0");
-	}
-
-	if(!jbclient_dyld_patch_enabled())
-	{
-		if (spawnConfig & kSpawnConfigTrust) {
-			trust_insert_libraries(envc);
-		}
-	}
-
-	pid_t pidval = 0;
-	if (!pidp) pidp = &pidval;
-	int ret = __posix_spawn_orig(pidp, path, desc, argv, envc);
-	pid_t pid = *pidp;
-	
-	envbuf_free(envc);
-
-	// maybe caller will use it again? restore flags
-	posix_spawnattr_setflags(attrp, flags);
-
-	if (patch_exec) { //exec failed?
-		jbdSpawnExecCancel(path);
-	} else if (ret == 0 && pid > 0) {
-		if (should_suspend) {
-			if(jbdSpawnPatchChild(pid, should_resume) != 0) { // jdb fault? kill
-				//just kill it instead of letting it hang forever, and the requester decides what to do later
-				kill(pid, SIGQUIT); //core dump
-				kill(pid, SIGKILL);
-				return 202;
-			}
-		}
-	}
-
-	return ret;
 }
 
 int roothide_systemhook___execve_prehook(const char *path, char *const argv[], char *const envp[], void *orig, int (*trust_binary)(const char *path))
@@ -346,47 +221,6 @@ int roothide_systemhook___execve_prehook(const char *path, char *const argv[], c
 	// so we need to set errno by ourself
 	errno = ret; 
 	return -1;
-}
-
-int roothide_systemhook___execve_posthook(const char *path, char *const argv[], char *const envp[])
-{
-	/* the posix_spawn call above should already trust the executable
-	(also its libraries) and the inserted libraries, so we can skip them below */
-
-	bool traced = false;
-
-	if(jbdExecTraceStart(path, &traced) != 0) { // jdb fault?
-		errno = 203;
-		return -1;
-	}
-
-	//wait for SIGSTOP
-	while(!traced) usleep(10*1000);
-
-	char **envc = envbuf_mutcopy((const char **)envp);
-	if(envbuf_getenv(envc, "DYLD_INSERT_LIBRARIES")) {
-		envbuf_setenv(&envc, "DYLD_IN_CACHE", "0");
-	}
-	
-	int ret = __execve_orig(path, argv, envc);
-	int olderr = errno;
-	
-	envbuf_free(envc);
-
-	// exec* should never return if successful
-
-	bool detached = false;
-
-	if(jbdExecTraceCancel(path, &detached) != 0) {
-		//broken process
-		exit(99);
-	}
-
-	//wait for detach
-	while(!detached) usleep(10*1000);
-
-	errno = olderr;
-	return ret;
 }
 
 void* (*dyld_dlopen_orig)(void *dyld, const char* path, int mode);

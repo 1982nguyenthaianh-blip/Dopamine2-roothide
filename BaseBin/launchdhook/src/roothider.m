@@ -164,8 +164,8 @@ void roothide_launchd_postinit(bool firstLoad)
 
 	loadAppStoredIdentifiers();
 
-	orig_xpc_dictionary_create_reply = xpc_dictionary_create_reply;
-	orig_xpc_pipe_routine_reply = xpc_pipe_routine_reply;
+	orig_xpc_dictionary_create_reply = (void *)xpc_dictionary_create_reply;
+	orig_xpc_pipe_routine_reply = (void *)xpc_pipe_routine_reply;
 	litehook_hook_function((void *)xpc_dictionary_create_reply, (void *)new_xpc_dictionary_create_reply);
 	litehook_hook_function((void *)xpc_pipe_routine_reply, (void *)new_xpc_pipe_routine_reply);
 
