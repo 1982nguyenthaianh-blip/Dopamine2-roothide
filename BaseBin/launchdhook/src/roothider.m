@@ -106,18 +106,9 @@ void roothide_launchd_preinit()
 	exec_set_patch(false);
 }
 
-static void _plog(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
-static void _plog(const char *fmt, ...) {
-	FILE *f = fopen("/var/mobile/launchdhook_debug.log", "a");
-	if (!f) return;
-	va_list a; va_start(a, fmt); vfprintf(f, fmt, a); va_end(a);
-	fclose(f);
-}
-
 void roothide_launchd_postinit(bool firstLoad)
 {
 	JBLogDebug("roothide_launchd_postinit: firstLoad=%d", firstLoad);
-	_plog("[postinit] START firstLoad=%d\n", firstLoad);
 
 	launchdhookFirstLoad = firstLoad;
 
@@ -145,23 +136,17 @@ void roothide_launchd_postinit(bool firstLoad)
 	else
 	{
 		NSString* systemhookFilePath = [NSString stringWithFormat:@"%@/systemhook-%016llX.dylib", JBROOT_PATH(@"/basebin"), jbinfo(jbrand)];
-		_plog("[postinit] systemhookFilePath=%s\n", systemhookFilePath.UTF8String);
 
 		if([NSFileManager.defaultManager fileExistsAtPath:JBROOT_PATH(@"/basebin/systemhook.dylib")])
 		{
 			[NSFileManager.defaultManager removeItemAtPath:systemhookFilePath error:nil];
-			BOOL moveOk = [NSFileManager.defaultManager moveItemAtPath:JBROOT_PATH(@"/basebin/systemhook.dylib") toPath:systemhookFilePath error:nil];
-			_plog("[postinit] moveItem=%d\n", moveOk);
-			assert(moveOk);
+			assert([NSFileManager.defaultManager moveItemAtPath:JBROOT_PATH(@"/basebin/systemhook.dylib") toPath:systemhookFilePath error:nil]);
 		}
 
-		int usret = unsandbox("/usr/lib", systemhookFilePath.fileSystemRepresentation);
-		_plog("[postinit] unsandbox=%d\n", usret);
-		assert(usret == 0);
+		assert(unsandbox("/usr/lib", systemhookFilePath.fileSystemRepresentation) == 0);
 
 		//new "real path"
 		asprintf(&HOOK_DYLIB_PATH, "/usr/lib/systemhook-%016llX.dylib", jbinfo(jbrand));
-		_plog("[postinit] HOOK_DYLIB_PATH=%s\n", HOOK_DYLIB_PATH);
 	}
 
 	if (__builtin_available(iOS 16.0, *))
@@ -181,9 +166,7 @@ void roothide_launchd_postinit(bool firstLoad)
 
 	if(!firstLoad)
 	{
-		_plog("[postinit] ensure_dyld_trustcache ...\n");
 		int ret = ensure_dyld_trustcache(JBROOT_PATH("/basebin/.fakelib/dyld"));
-		_plog("[postinit] ensure_dyld_trustcache=%d\n", ret);
 		if (ret != 0) {
 			launchd_panic("ensure dyld trustcache failed: %d", ret);
 			return;
@@ -198,11 +181,7 @@ void roothide_launchd_postinit(bool firstLoad)
 	litehook_hook_function((void *)xpc_pipe_routine_reply, (void *)new_xpc_pipe_routine_reply);
 
 	// load jailbreakd after applying hooks
-	_plog("[postinit] initJailbreakd(firstLoad=%d) ...\n", firstLoad);
-	int jbdret = initJailbreakd(firstLoad);
-	_plog("[postinit] initJailbreakd=%d\n", jbdret);
-	assert(jbdret == 0);
-	_plog("[postinit] DONE\n");
+	assert(initJailbreakd(firstLoad) == 0);
 }
 
 #include <dlfcn.h>
