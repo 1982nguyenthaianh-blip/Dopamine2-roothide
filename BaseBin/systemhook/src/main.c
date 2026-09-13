@@ -575,7 +575,7 @@ __attribute__((constructor)) static void initializer(void)
 			// I-5: Mach checkin
 			char jbRootPathBuf[PATH_MAX] = {0}, bootUUIDBuf[PATH_MAX] = {0}, sandboxExtsBuf[4096] = {0};
 			bool fullyDebugged = false;
-			int checkinRet = jbclient_mach_process_checkin(jbRootPathBuf, bootUUIDBuf, sandboxExtsBuf, &fullyDebugged);
+			int checkinRet = jbclient_mach_process_checkin(jbRootPathBuf, bootUUIDBuf, sandboxExtsBuf, &fullyDebugged, NULL);
 			roothide_log("[sh] checkin=%d\n", checkinRet);
 			if (checkinRet == 0) {
 				consume_tokenized_sandbox_extensions(sandboxExtsBuf);

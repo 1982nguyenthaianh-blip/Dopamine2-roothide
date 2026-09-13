@@ -1,7 +1,7 @@
 #import <Foundation/Foundation.h>
 
 #include <spawn.h>
-#include <substrate.h>
+#include <litehook.h>
 #include <sys/sysctl.h>
 
 #include <libjailbreak/libjailbreak.h>
@@ -140,17 +140,16 @@ void roothide_launchd_postinit(bool firstLoad)
 
 	if (__builtin_available(iOS 16.0, *))
 	{
-		void* __sysctl_orig = NULL;
-		void* __sysctlbyname_orig = NULL;
-		MSHookFunction(&__sysctl, (void *) __sysctl_hook, &__sysctl_orig);
-		MSHookFunction(&__sysctlbyname, (void *) __sysctlbyname_hook, &__sysctlbyname_orig);
-		MSHookFunction(&bind, (void*)new_bind, &orig_bind); //fix network issues on iOS16+
+		orig_bind = bind;
+		litehook_hook_function((void *)__sysctl, (void *)__sysctl_hook);
+		litehook_hook_function((void *)__sysctlbyname, (void *)__sysctlbyname_hook);
+		litehook_hook_function((void *)bind, (void *)new_bind); //fix network issues on iOS16+
 	}
 #ifdef __arm64e__
 	else 
 	{
 		// iOS15 arm64e only
-		// MSHookFunction(sysctlbyname, (void *)sysctlbyname_hook, (void **)&sysctlbyname_orig);
+		// litehook_hook_function(sysctlbyname, (void *)sysctlbyname_hook);
 	}
 #endif
 
@@ -165,8 +164,10 @@ void roothide_launchd_postinit(bool firstLoad)
 
 	loadAppStoredIdentifiers();
 
-	MSHookFunction(&xpc_dictionary_create_reply, (void*)new_xpc_dictionary_create_reply, &orig_xpc_dictionary_create_reply);
-	MSHookFunction(&xpc_pipe_routine_reply, (void*)new_xpc_pipe_routine_reply, &orig_xpc_pipe_routine_reply);
+	orig_xpc_dictionary_create_reply = xpc_dictionary_create_reply;
+	orig_xpc_pipe_routine_reply = xpc_pipe_routine_reply;
+	litehook_hook_function((void *)xpc_dictionary_create_reply, (void *)new_xpc_dictionary_create_reply);
+	litehook_hook_function((void *)xpc_pipe_routine_reply, (void *)new_xpc_pipe_routine_reply);
 
 	// load jailbreakd after applying hooks
 	assert(initJailbreakd(firstLoad) == 0);
@@ -176,15 +177,18 @@ void roothide_launchd_postinit(bool firstLoad)
 #include <IOKit/IOKitLib.h>
 void fix__iosConnect()
 {
-    MSImageRef IOSurfaceImage = MSGetImageByName("/System/Library/Frameworks/IOSurface.framework/IOSurface");
-    JBLogDebug("IOSurfaceImage=%p\n", IOSurfaceImage);
-    assert(IOSurfaceImage != NULL);
-
-    io_service_t* __iosService = MSFindSymbol(IOSurfaceImage, "__iosService");
-    io_connect_t* __iosConnect = MSFindSymbol(IOSurfaceImage, "__iosConnect");
-    assert(__iosService != NULL && __iosConnect != NULL);
-
+    io_service_t* __iosService = (io_service_t*)litehook_find_dsc_symbol("/System/Library/Frameworks/IOSurface.framework/IOSurface", "__iosService");
+    io_connect_t* __iosConnect = (io_connect_t*)litehook_find_dsc_symbol("/System/Library/Frameworks/IOSurface.framework/IOSurface", "__iosConnect");
+    if (!__iosService || !__iosConnect) {
+        void *IOSurfaceHandle = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_LAZY | RTLD_GLOBAL);
+        if (IOSurfaceHandle) {
+            if (!__iosService) __iosService = (io_service_t*)dlsym(IOSurfaceHandle, "__iosService");
+            if (!__iosConnect) __iosConnect = (io_connect_t*)dlsym(IOSurfaceHandle, "__iosConnect");
+        }
+    }
     JBLogDebug("__iosService=%p __iosConnect=%p\n", __iosService, __iosConnect);
+    if (!__iosService || !__iosConnect) return;
+
     JBLogDebug("*__iosService=%d *__iosConnect=%d\n", *__iosService, *__iosConnect);
 
     kern_return_t (*IOServiceClose)(io_connect_t connect);
@@ -192,20 +196,18 @@ void fix__iosConnect()
 
     *(void **)&IOServiceOpen = dlsym(RTLD_DEFAULT, "IOServiceOpen");
     *(void **)&IOServiceClose = dlsym(RTLD_DEFAULT, "IOServiceClose");
-    assert(IOServiceOpen != NULL && IOServiceClose != NULL);
+    if (!IOServiceOpen || !IOServiceClose) return;
     
     io_connect_t old__iosConnect = *__iosConnect;
 
     if(old__iosConnect) {
-
-        assert(*__iosService != 0);
+        if (*__iosService == 0) return;
 
         kern_return_t kr = IOServiceOpen(*__iosService, mach_task_self(), 0, __iosConnect);
         JBLogDebug("IOServiceOpen kr=%x, new iosConnect=%d\n", kr, *__iosConnect);
-        assert(kr == KERN_SUCCESS);
-
-        kr = IOServiceClose(old__iosConnect);
-        assert(kr == KERN_SUCCESS);
+        if (kr == KERN_SUCCESS) {
+            IOServiceClose(old__iosConnect);
+        }
     }
 }
 
