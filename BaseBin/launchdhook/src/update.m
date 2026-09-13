@@ -145,6 +145,16 @@ void jbupdate_update_system_info(void)
 				sets[idx++] = "perfkrw";
 			}
 
+/********************** roothide *************************/
+			sets[idx++] = "namecache";
+
+			if (xpf_set_is_supported("amfi_oids")) {
+				sets[idx++] = "amfi_oids";
+			}
+
+			sets[idx] = NULL;
+/********************** roothide *************************/
+
 			newSystemInfoXdict = xpf_construct_offset_dictionary((const char **)sets);
 			if (!newSystemInfoXdict) {
 				error = xpf_get_error();
