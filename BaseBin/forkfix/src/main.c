@@ -76,10 +76,20 @@ __attribute__((visibility ("default"))) pid_t forkfix___fork(void)
 	return pid;
 }
 
+#include <assert.h>
+
 void apply_fork_hook(void)
 {
 	static dispatch_once_t onceToken;
 	dispatch_once (&onceToken, ^{
+/************************* roothide specific **********************/
+		// find systemhook using <install-name>
+		void *systemhookHandle = dlopen("systemhook.dylib", RTLD_NOLOAD);
+		assert(systemhookHandle != NULL);
+		kern_return_t (*litehook_hook_function)(void *source, void *target) = dlsym(systemhookHandle, "litehook_hook_function");
+		assert(litehook_hook_function != NULL);
+/************************* roothide specific **********************/
+
 		litehook_hook_function((void *)__fork, (void *)forkfix___fork);
 	});
 }

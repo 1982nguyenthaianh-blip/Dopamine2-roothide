@@ -185,23 +185,6 @@ __attribute__((constructor)) static void initializer(void)
 	sysctlbyname_orig = sysctlbyname;
 	litehook_rebind_symbol(LITEHOOK_REBIND_GLOBAL, (void *)sysctlbyname, (void *)sysctlbyname_hook, NULL);
 
-	if (getenv("DOPAMINE_IS_HIDDEN") != 0) {
-		// If the jailbreak is currently hidden, fakelib had to be mounted again before the userspace reboot
-		// Now that the userspace reboot is over, we can unmount it again
-
-		// Just like when we mount it inside the posix_spawn hook, the jbserver is not up at this point in time
-		// So we need to host our own here again, just so that jbctl can talk to it
-		mach_port_t serverPort = jbserver_local_start();
-		jbctl_earlyboot(serverPort, "internal", "fakelib", "unmount", NULL);
-		jbserver_local_stop();
-
-		// Also disable the systemwide domain again
-		systemwide_domain_set_enabled(false);
-
-		// No need to keep this around
-		unsetenv("DOPAMINE_IS_HIDDEN");
-	}
-
 	// This will ensure launchdhook is always reinjected after userspace reboots
 	// As this launchd will pass environ to the next launchd...
 	setenv("DYLD_INSERT_LIBRARIES", JBROOT_PATH("/basebin/launchdhook.dylib"), 1);

@@ -95,7 +95,7 @@ int __posix_spawn_hook(pid_t *restrict pid, const char *restrict path,
 
 			// If the jailbreak is currently hidden, fakelib is not mounted
 			// It needs to be mounted to regain launchd code execution after the userspace reboot
-			ensure_fakelib_mounted();
+//			ensure_fakelib_mounted();
 
 #if LOG_PROCESS_LAUNCHES
 			FILE *f = fopen("/var/mobile/launch_log.txt", "a");
