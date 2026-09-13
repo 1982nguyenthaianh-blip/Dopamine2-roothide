@@ -1,14 +1,14 @@
 #import <Foundation/Foundation.h>
 
 #include <spawn.h>
-#include <substrate.h>
+#include <litehook.h>
 #include <sys/sysctl.h>
 
 #include <libjailbreak/libjailbreak.h>
 #include <libjailbreak/roothider.h>
 
-#include "../systemhook/src/common.h"
-#include "../systemhook/src/envbuf.h"
+#include "../systemhook/src/common/common.h"
+#include "../systemhook/src/common/envbuf.h"
 
 const char* HOOK_DYLIB_PATH = NULL;
 
@@ -27,6 +27,17 @@ int __sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, const void *
 int __sysctl_hook(int *name, u_int namelen, void *oldp, size_t *oldlenp, const void *newp, size_t newlen);
 int __sysctlbyname(const char *name, size_t namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
 int __sysctlbyname_hook(const char *name, size_t namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
+
+extern void draw_boot_logo(const char *bootLogoPath);
+int __sysctlbyname_launchd_hook(const char *name, size_t namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen)
+{
+	if (name) {
+		if ((namelen && !strncmp(name, "kern.willuserspacereboot", namelen)) || !strcmp(name, "kern.willuserspacereboot")) {
+			draw_boot_logo(JBROOT_PATH("/basebin/bootlogo.jp2"));
+		}
+	}
+	return __sysctlbyname_hook(name, namelen, oldp, oldlenp, newp, newlen);
+}
 
 /*
 int (*sysctlbyname_orig)(const char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen);
@@ -106,12 +117,12 @@ void roothide_launchd_postinit(bool firstLoad)
 	if(firstLoad)
 	{
 		HOOK_DYLIB_PATH = "";
-		
+
 		if (__builtin_available(iOS 16.0, *))
 		{
 			hideDeveloperMode();
 		}
-		
+
 #ifdef __arm64e__
 		if (!__builtin_available(iOS 16.0, *))
 		{
@@ -123,7 +134,7 @@ void roothide_launchd_postinit(bool firstLoad)
 #endif
 	}
 	else
-	{		
+	{
 		NSString* systemhookFilePath = [NSString stringWithFormat:@"%@/systemhook-%016llX.dylib", JBROOT_PATH(@"/basebin"), jbinfo(jbrand)];
 
 		if([NSFileManager.defaultManager fileExistsAtPath:JBROOT_PATH(@"/basebin/systemhook.dylib")])
@@ -131,7 +142,7 @@ void roothide_launchd_postinit(bool firstLoad)
 			[NSFileManager.defaultManager removeItemAtPath:systemhookFilePath error:nil];
 			assert([NSFileManager.defaultManager moveItemAtPath:JBROOT_PATH(@"/basebin/systemhook.dylib") toPath:systemhookFilePath error:nil]);
 		}
-		
+
 		assert(unsandbox("/usr/lib", systemhookFilePath.fileSystemRepresentation) == 0);
 
 		//new "real path"
@@ -140,17 +151,16 @@ void roothide_launchd_postinit(bool firstLoad)
 
 	if (__builtin_available(iOS 16.0, *))
 	{
-		void* __sysctl_orig = NULL;
-		void* __sysctlbyname_orig = NULL;
-		MSHookFunction(&__sysctl, (void *) __sysctl_hook, &__sysctl_orig);
-		MSHookFunction(&__sysctlbyname, (void *) __sysctlbyname_hook, &__sysctlbyname_orig);
-		MSHookFunction(&bind, (void*)new_bind, &orig_bind); //fix network issues on iOS16+
+		orig_bind = bind;
+		litehook_hook_function((void *)__sysctl, (void *)__sysctl_hook);
+		litehook_hook_function((void *)__sysctlbyname, (void *)__sysctlbyname_launchd_hook);
+		litehook_hook_function((void *)bind, (void *)new_bind); //fix network issues on iOS16+
 	}
 #ifdef __arm64e__
 	else 
 	{
 		// iOS15 arm64e only
-		// MSHookFunction(sysctlbyname, (void *)sysctlbyname_hook, (void **)&sysctlbyname_orig);
+		// litehook_hook_function(sysctlbyname, (void *)sysctlbyname_hook);
 	}
 #endif
 
@@ -165,8 +175,10 @@ void roothide_launchd_postinit(bool firstLoad)
 
 	loadAppStoredIdentifiers();
 
-	MSHookFunction(&xpc_dictionary_create_reply, (void*)new_xpc_dictionary_create_reply, &orig_xpc_dictionary_create_reply);
-	MSHookFunction(&xpc_pipe_routine_reply, (void*)new_xpc_pipe_routine_reply, &orig_xpc_pipe_routine_reply);
+	orig_xpc_dictionary_create_reply = (void *)xpc_dictionary_create_reply;
+	orig_xpc_pipe_routine_reply = (void *)xpc_pipe_routine_reply;
+	litehook_hook_function((void *)xpc_dictionary_create_reply, (void *)new_xpc_dictionary_create_reply);
+	litehook_hook_function((void *)xpc_pipe_routine_reply, (void *)new_xpc_pipe_routine_reply);
 
 	// load jailbreakd after applying hooks
 	assert(initJailbreakd(firstLoad) == 0);
@@ -176,15 +188,18 @@ void roothide_launchd_postinit(bool firstLoad)
 #include <IOKit/IOKitLib.h>
 void fix__iosConnect()
 {
-    MSImageRef IOSurfaceImage = MSGetImageByName("/System/Library/Frameworks/IOSurface.framework/IOSurface");
-    JBLogDebug("IOSurfaceImage=%p\n", IOSurfaceImage);
-    assert(IOSurfaceImage != NULL);
-
-    io_service_t* __iosService = MSFindSymbol(IOSurfaceImage, "__iosService");
-    io_connect_t* __iosConnect = MSFindSymbol(IOSurfaceImage, "__iosConnect");
-    assert(__iosService != NULL && __iosConnect != NULL);
-
+    io_service_t* __iosService = (io_service_t*)litehook_find_dsc_symbol("/System/Library/Frameworks/IOSurface.framework/IOSurface", "__iosService");
+    io_connect_t* __iosConnect = (io_connect_t*)litehook_find_dsc_symbol("/System/Library/Frameworks/IOSurface.framework/IOSurface", "__iosConnect");
+    if (!__iosService || !__iosConnect) {
+        void *IOSurfaceHandle = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_LAZY | RTLD_GLOBAL);
+        if (IOSurfaceHandle) {
+            if (!__iosService) __iosService = (io_service_t*)dlsym(IOSurfaceHandle, "__iosService");
+            if (!__iosConnect) __iosConnect = (io_connect_t*)dlsym(IOSurfaceHandle, "__iosConnect");
+        }
+    }
     JBLogDebug("__iosService=%p __iosConnect=%p\n", __iosService, __iosConnect);
+    if (!__iosService || !__iosConnect) return;
+
     JBLogDebug("*__iosService=%d *__iosConnect=%d\n", *__iosService, *__iosConnect);
 
     kern_return_t (*IOServiceClose)(io_connect_t connect);
@@ -192,20 +207,18 @@ void fix__iosConnect()
 
     *(void **)&IOServiceOpen = dlsym(RTLD_DEFAULT, "IOServiceOpen");
     *(void **)&IOServiceClose = dlsym(RTLD_DEFAULT, "IOServiceClose");
-    assert(IOServiceOpen != NULL && IOServiceClose != NULL);
+    if (!IOServiceOpen || !IOServiceClose) return;
     
     io_connect_t old__iosConnect = *__iosConnect;
 
     if(old__iosConnect) {
-
-        assert(*__iosService != 0);
+        if (*__iosService == 0) return;
 
         kern_return_t kr = IOServiceOpen(*__iosService, mach_task_self(), 0, __iosConnect);
         JBLogDebug("IOServiceOpen kr=%x, new iosConnect=%d\n", kr, *__iosConnect);
-        assert(kr == KERN_SUCCESS);
-
-        kr = IOServiceClose(old__iosConnect);
-        assert(kr == KERN_SUCCESS);
+        if (kr == KERN_SUCCESS) {
+            IOServiceClose(old__iosConnect);
+        }
     }
 }
 
@@ -380,28 +393,31 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 	bool roothideBlacklisted = isBlacklistedPath(path);
 	if (choicyBlocked || roothideBlacklisted)
 	{
-		int ret;
-		pid_t pid = 0;
+		int ret = 0;
 
 		JBLogDebug("blacklisted app %s", path);
 
 		if(dyld_patch_enabled() && iOS15Arm64e && roothideBlacklisted && (strstr(path, "/PlugIns/") || strstr(path, "/Extensions/") || strstr(path, ".appex/"))) {
-			JBLogDebug("prevent blacklisted app's extension from running: ", path);
-			ret = EPERM;
+			JBLogDebug("prevent blacklisted app's extension from running: %s", path);
+			return EPERM;
 		}
 		else if(dyld_patch_enabled() && iOS15Arm64e && roothideBlacklisted && (envbuf_getenv(envp, "ActivePrewarm") || envbuf_getenv(envp, "DYLD_USE_CLOSURES"))) {
-			JBLogDebug("prevent blacklisted app from prewarming: ", path);
-			ret = EPERM;
+			JBLogDebug("prevent blacklisted app from prewarming: %s", path);
+			return EPERM;
 		}
-		else if (roothideBlacklisted)
-		{
-#if 0
+
+		char **envc = envbuf_mutcopy((const char **)envp);
+
+		//choicy may set these 
+		envbuf_unsetenv(&envc, "_SafeMode");
+		envbuf_unsetenv(&envc, "_MSSafeMode");
+
+		pid_t pid = 0;
+		if (roothideBlacklisted) {
+#if 0 // set to 1 to enable debug logging → /var/mobile/roothide_whitelist.log
 			FILE *logf = fopen("/var/mobile/roothide_whitelist.log", "a");
 			if (logf) { fprintf(logf, "[ld] ON: %s\n", strrchr(path,'/')?strrchr(path,'/')+1:path); fclose(logf); }
 #endif
-			char **envc = envbuf_mutcopy((const char **)envp);
-			envbuf_unsetenv(&envc, "_SafeMode");
-			envbuf_unsetenv(&envc, "_MSSafeMode");
 			envbuf_setenv(&envc, "ROOTHIDE_WHITELIST_TWEAK", "AUTO");
 
 			const char *syshookPath = (HOOK_DYLIB_PATH && HOOK_DYLIB_PATH[0])
@@ -414,38 +430,34 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 			} else if (!existingInserts) {
 				envbuf_setenv(&envc, "DYLD_INSERT_LIBRARIES", syshookPath);
 			}
-			ret = __posix_spawn_hook(&pid, path, desc, argv, envc);
+			ret = __posix_spawn_hook(&pid, path, desc, argv, envc);  // I-3: bắt buộc __posix_spawn_hook
 			if (pidp) *pidp = pid;
 			envbuf_free(envc);
+			return ret;
 		}
-		else
-		{
-			char **envc = envbuf_mutcopy((const char **)envp);
-			envbuf_unsetenv(&envc, "_SafeMode");
-			envbuf_unsetenv(&envc, "_MSSafeMode");
 
-			volatile pid_t* blacklistedPidp = allocBlacklistProcessId();
+		/* According to xnu, the new thread in new process will not run in userland until after copyout pid */
+		volatile pid_t* blacklistedPidp = allocBlacklistProcessId();
 
-			if(!dyld_patch_enabled() || !iOS15Arm64e) {
-				ret = __posix_spawn_orig_wrapper(blacklistedPidp, path, desc, argv, envc);
-			} else {
-				ret = roothide_launchd___posix_spawn__spinlock_fix_only(blacklistedPidp, path, desc, argv, envc);
-			}
+		if(roothideBlacklisted || !dyld_patch_enabled() || !iOS15Arm64e) {
+			ret = __posix_spawn_orig_wrapper(blacklistedPidp, path, desc, argv, envc);
+		} else {
+			ret = roothide_launchd___posix_spawn__spinlock_fix_only(blacklistedPidp, path, desc, argv, envc);
+		}
 
-			pid = *blacklistedPidp;
-			if(pidp) *pidp = *blacklistedPidp;
+		pid = *blacklistedPidp;
+		if(pidp) *pidp = *blacklistedPidp;
 
-			commitBlacklistProcessId(blacklistedPidp);
-			blacklistedPidp = NULL;
+		commitBlacklistProcessId(blacklistedPidp); // will release blacklistedPidp
+		blacklistedPidp = NULL;
 
-			envbuf_free(envc);
-
-			if(ret==0 && pid>0) {
-				short flags = 0;
-				posix_spawnattr_getflags(attrp, &flags);
-				if((flags & POSIX_SPAWN_START_SUSPENDED) != 0) {
-					platform_set_process_debugged(pid, false);
-				}
+		envbuf_free(envc);
+			
+		if(ret==0 && pid>0) {
+			short flags = 0;
+			posix_spawnattr_getflags(attrp, &flags);
+			if((flags & POSIX_SPAWN_START_SUSPENDED) != 0) {
+				platform_set_process_debugged(pid, false);
 			}
 		}
 
@@ -460,4 +472,3 @@ int roothide_launchd___posix_spawn_prehook(pid_t *restrict pidp, const char *res
 	
 	return __posix_spawn_hook(pidp, path, desc, argv, envp);
 }
-

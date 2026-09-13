@@ -8,7 +8,6 @@
 #include "roothider/exec_patch.h"
 #include "roothider/jailbreakd.h"
 #include "roothider/xpc_private.h"
-#include "roothider/crashreporter.h"
 
 extern int roothide_unsupport_request();
 extern bool roothide_domain_allowed(audit_token_t clientToken);
