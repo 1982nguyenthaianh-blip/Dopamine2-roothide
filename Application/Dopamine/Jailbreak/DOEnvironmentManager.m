@@ -28,6 +28,7 @@
 #import "DOPreferenceManager.h"
 #import "NSData+Hex.h"
 #import <LocalAuthentication/LocalAuthentication.h>
+#import <libjailbreak/roothider/common.h>
 
 int reboot3(uint64_t flags, ...);
 
@@ -206,6 +207,90 @@ int reboot3(uint64_t flags, ...);
     size_t len = sizeof(cpusubtype);
     if (sysctlbyname("hw.cpusubtype", &cpusubtype, &len, NULL, 0) == -1) { return NO; }
     return (cpusubtype & ~CPU_SUBTYPE_MASK) == CPU_SUBTYPE_ARM64E;
+}
+
+- (NSString *)systemVersion
+{
+    return (__bridge NSString *)MGCopyAnswer((__bridge CFStringRef)@"ProductVersion");
+}
+
+- (BOOL)isSPTM
+{
+    if (@available(iOS 17.0, *)) {
+        io_registry_entry_t memory_map = IORegistryEntryFromPath(kIOMainPortDefault, "IODeviceTree:/chosen/memory-map");
+        if (memory_map == IO_OBJECT_NULL) return NO;
+
+        CFArrayRef keys = (CFArrayRef)IORegistryEntryCreateCFProperty(memory_map, CFSTR(kIORegistryEntryPropertyKeysKey), kCFAllocatorDefault, 0);
+        IOObjectRelease(memory_map);
+        if (!keys) return NO;
+
+        CFRange range = CFRangeMake(0, CFArrayGetCount(keys));
+        bool isSPTM = CFArrayContainsValue(keys, range, CFSTR("SPTM")) && CFArrayContainsValue(keys, range, CFSTR("TXM"));
+        CFRelease(keys);
+
+        return isSPTM;
+    }
+    return false;
+}
+
+- (NSString *)accessibleSPTMPath
+{
+    NSString *sptmInAppPath = [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"sptm.img4"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:sptmInAppPath]) {
+        return sptmInAppPath;
+    }
+    
+    NSString *sptmInDocsPath = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/sptm.img4"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:sptmInDocsPath]) {
+        return sptmInDocsPath;
+    }
+    
+    sptmInDocsPath = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/sptm.im4p"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:sptmInDocsPath]) {
+        return sptmInDocsPath;
+    }
+
+    return nil;
+}
+
+- (NSString *)accessibleTXMPath
+{
+    NSString *txmInAppPath = [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"txm.img4"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:txmInAppPath]) {
+        return txmInAppPath;
+    }
+    
+    NSString *txmInDocsPath = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/txm.img4"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:txmInDocsPath]) {
+        return txmInDocsPath;
+    }
+    
+    txmInDocsPath = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/txm.im4p"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:txmInDocsPath]) {
+        return txmInDocsPath;
+    }
+
+    return nil;
+}
+
+- (void)setJailbroken:(BOOL)jailbroken withVersion:(NSString *)version
+{
+    _isJailbroken = jailbroken;
+    if (_isJailbroken) _jailbrokenVersion = version;
+}
+
+- (void)rebuildIconCache
+{
+    [self runAsRoot:^{
+        [self runUnsandboxed:^{
+            exec_cmd(JBROOT_PATH("/basebin/jbctl"), "rebuild_icon_cache", NULL);
+        }];
+    }];
+}
+
+- (int)setPrivatePrebootProtected:(BOOL)protected
+{
+    return 0;
 }
 
 - (NSString *)versionSupportString

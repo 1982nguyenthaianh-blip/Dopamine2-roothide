@@ -31,6 +31,7 @@
 #import <libjailbreak/jbclient_mach.h>
 #import <libjailbreak/kcall_arm64.h>
 #import <libjailbreak/basebin_gen.h>
+#import <libjailbreak/roothider/common.h>
 #import <CoreServices/LSApplicationProxy.h>
 #import <sys/utsname.h>
 #import "spawn.h"
@@ -591,9 +592,13 @@ void *boomerang_server(struct boomerang_info *info)
 - (void)runWithError:(NSError **)errOut didRemoveJailbreak:(BOOL*)didRemove showLogs:(BOOL *)showLogs
 {
 /****************** roothide specific ****************/
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [[UIApplication sharedApplication] setIdleTimerDisabled:YES];
-    });
+    Class uiAppClass = NSClassFromString(@"UIApplication");
+    if (uiAppClass) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            id app = [uiAppClass performSelector:@selector(sharedApplication)];
+            [app performSelector:@selector(setIdleTimerDisabled:) withObject:(__bridge id)(void*)1];
+        });
+    }
 	
     exec_set_patch(false);
 /****************** roothide specific ****************/
