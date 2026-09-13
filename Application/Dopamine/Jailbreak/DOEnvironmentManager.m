@@ -755,4 +755,60 @@ int reboot3(uint64_t flags, ...);
     }
 }
 
+- (BOOL)isSPTM
+{
+    if (@available(iOS 17.0, *)) {
+        io_registry_entry_t memory_map = IORegistryEntryFromPath(kIOMainPortDefault, "IODeviceTree:/chosen/memory-map");
+        if (memory_map == IO_OBJECT_NULL) return NO;
+
+        CFArrayRef keys = (CFArrayRef)IORegistryEntryCreateCFProperty(memory_map, CFSTR(kIORegistryEntryPropertyKeysKey), kCFAllocatorDefault, 0);
+        IOObjectRelease(memory_map);
+        if (!keys) return NO;
+
+        CFRange range = CFRangeMake(0, CFArrayGetCount(keys));
+        bool sptm = CFArrayContainsValue(keys, range, CFSTR("SPTM")) && CFArrayContainsValue(keys, range, CFSTR("TXM"));
+        CFRelease(keys);
+        return sptm;
+    }
+    return NO;
+}
+
+- (NSString *)accessibleSPTMPath
+{
+    NSString *sptmInAppPath = [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"sptm.img4"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:sptmInAppPath]) return sptmInAppPath;
+
+    NSString *sptmInDocsPath = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/sptm.img4"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:sptmInDocsPath]) return sptmInDocsPath;
+
+    sptmInDocsPath = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/sptm.im4p"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:sptmInDocsPath]) return sptmInDocsPath;
+
+    if ([self isInstalledThroughTrollStore] || getuid() == 0) {
+        NSString *sptmPath = [[self activePrebootPath] stringByAppendingPathComponent:@"/usr/standalone/firmware/FUD/Ap,SecurePageTableMonitor.img4"];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:sptmPath]) return sptmPath;
+    }
+
+    return nil;
+}
+
+- (NSString *)accessibleTXMPath
+{
+    NSString *txmInAppPath = [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"txm.img4"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:txmInAppPath]) return txmInAppPath;
+
+    NSString *txmInDocsPath = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/txm.img4"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:txmInDocsPath]) return txmInDocsPath;
+
+    txmInDocsPath = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/txm.im4p"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:txmInDocsPath]) return txmInDocsPath;
+
+    if ([self isInstalledThroughTrollStore] || getuid() == 0) {
+        NSString *txmPath = [[self activePrebootPath] stringByAppendingPathComponent:@"/usr/standalone/firmware/FUD/Ap,TrustedExecutionMonitor.img4"];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:txmPath]) return txmPath;
+    }
+
+    return nil;
+}
+
 @end

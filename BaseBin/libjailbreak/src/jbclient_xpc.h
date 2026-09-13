@@ -45,4 +45,8 @@ bool jbclient_dopamine_is_jailbroken(char **version);
 int jbclient_dopamine_get_root(void);
 int jbclient_dopamine_drop_root(void);
 
+bool jbclient_roothide_jailbroken(void);
+mach_port_t jbclient_jailbreakd_lookup(void);
+int jbclient_trust_executable_recurse(const char *executablePath, xpc_object_t preferredArchsArray);
+
 #endif
