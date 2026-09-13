@@ -7,7 +7,7 @@ LDFLAGS = -dynamiclib -rpath @loader_path/present -rpath @loader_path/fallback -
 sign: $(TARGET)
 	@ldid -Cadhoc -S $^
 
-$(TARGET): $(wildcard src/*.m src/*.c src/jbserver/*.c ../systemhook/src/common/*.[cSm] ../systemhook/src/envbuf.c ../_external/modules/litehook/src/*.c)
+$(TARGET): $(wildcard src/*.m src/*.c src/jbserver/*.c ../systemhook/src/common/*.[cSm] ../_external/modules/litehook/src/*.c)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 clean:
