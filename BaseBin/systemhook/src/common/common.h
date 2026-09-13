@@ -12,11 +12,14 @@ typedef enum
 	kSpawnConfigTrust = 1 << 1,
 } kSpawnConfig;
 
+kSpawnConfig spawn_config_for_executable(const char* path, char *const argv[restrict]);
+
 int __posix_spawn(pid_t *restrict pid, const char *restrict path, struct _posix_spawn_args_desc *desc, char *const argv[restrict], char *const envp[restrict]);
 int __execve(const char *path, char *const argv[], char *const envp[]);
 
 bool string_has_prefix(const char *str, const char* prefix);
 bool string_has_suffix(const char* str, const char* suffix);
+void string_enumerate_components(const char *string, const char *separator, void (^enumBlock)(const char *pathString, bool *stop));
 
 int __posix_spawn_orig(pid_t *restrict pid, const char *restrict path, struct _posix_spawn_args_desc *desc, char *const argv[restrict], char * const envp[restrict]);
 int __execve_orig(const char *path, char *const argv[], char *const envp[]);
