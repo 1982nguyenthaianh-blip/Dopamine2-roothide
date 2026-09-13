@@ -31,6 +31,7 @@
 #import <libjailbreak/roothider/common.h>
 
 int reboot3(uint64_t flags, ...);
+extern CFTypeRef MGCopyAnswer(CFStringRef prop);
 
 @implementation DOEnvironmentManager
 
@@ -602,76 +603,39 @@ int reboot3(uint64_t flags, ...);
     }
 }
 
-/*
+- (NSString *)privatePrebootPath
+{
+    return nil;
+}
+
+- (BOOL)isJailbrokenWithOtherJailbreak
+{
+    return NO;
+}
+
 - (BOOL)isFakelibMounted
 {
-    struct statfs fsb;
-    if (statfs("/usr/lib", &fsb) != 0) return NO;
-    return strcmp(fsb.f_mntonname, "/usr/lib") == 0;
+    return NO;
 }
 
 - (int)setFakelibMounted:(BOOL)mounted
 {
-    int r = 0;
-    if (mounted != [self isFakelibMounted]) {
-        const char *arg = mounted ? "mount" : "unmount";
-        r = exec_cmd(JBROOT_PATH("/basebin/jbctl"), "internal", "fakelib", arg, NULL);
-    }
-    return r;
+    return 0;
 }
 
 - (int)setPrivatePrebootProtected:(BOOL)protected
 {
-    const char *arg = protected ? "activate" : "deactivate";
-    return exec_cmd(JBROOT_PATH("/basebin/jbctl"), "internal", "protection", arg, NULL);
+    return 0;
 }
 
 - (BOOL)isJailbreakHidden
 {
-    return ![[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb"];
+    return NO;
 }
 
 - (void)setJailbreakHidden:(BOOL)hidden
 {
-    if (hidden && ![self isJailbroken] && geteuid() != 0) {
-        [self runTrollStoreAction:@"hide-jailbreak"];
-        return;
-    }
-    
-    void (^actionBlock)(void) = ^{
-        BOOL alreadyHidden = [self isJailbreakHidden];
-        if (hidden != alreadyHidden) {
-            if (hidden) {
-                if ([self isJailbroken]) {
-                    [self unregisterJailbreakApps];
-                    [self setPrivatePrebootProtected:NO];
-                    [self setFakelibMounted:NO];
-                    jbclient_platform_set_systemwide_domain_enabled(false);
-                }
-                [[NSFileManager defaultManager] removeItemAtPath:@"/var/jb" error:nil];
-            }
-            else {
-                [[NSFileManager defaultManager] createSymbolicLinkAtPath:@"/var/jb" withDestinationPath:JBROOT_PATH(@"/") error:nil];
-                if ([self isJailbroken]) {
-                    jbclient_platform_set_systemwide_domain_enabled(true);
-                    [self setFakelibMounted:YES];
-                    [self setPrivatePrebootProtected:YES];
-                    [self refreshJailbreakApps];
-                }
-            }
-        }
-    };
-    
-    if ([self isJailbroken]) {
-        [self runAsRoot:^{
-            [self runUnsandboxed:actionBlock];
-        }];
-    }
-    else {
-        actionBlock();
-    }
 }
-*/
 
 - (NSString *)accessibleKernelPath
 {

@@ -865,8 +865,8 @@ void *boomerang_server(struct boomerang_info *info)
     xpc_dictionary_set_uint64(message, "inv", 1);
     uint8_t uaf_xpc[1024];
     memset(uaf_xpc, 0x41, 1024);
-    xpc_dictionary_set_value(message, "ool", xpc_data_create(uaf_xpc, 1024));
-    xpc_connection_send_message_with_reply_sync(client, message);
+    xpc_object_t reply = xpc_connection_send_message_with_reply_sync(client, message);
+    (void)reply;
     return 0;
 }
 

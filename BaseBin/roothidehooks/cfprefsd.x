@@ -1,6 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <substrate.h>
 #include <roothide.h>
+#include <bsm/libbsm.h>
 #include "common.h"
 
 #define PROC_PIDPATHINFO_MAXSIZE        (4*MAXPATHLEN)
