@@ -43,8 +43,8 @@ struct system_info {
 		uint64_t usesPACBypass;
 		char *rootPath;
 		char *appIdentifier;
-		char *jbrand;
-		bool palera1n;
+		uint64_t jbrand;
+		uint64_t palera1n;
 		bool dyld_patch_enabled;
 	} jailbreakInfo;
 
