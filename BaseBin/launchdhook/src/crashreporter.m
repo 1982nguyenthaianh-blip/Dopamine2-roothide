@@ -1,5 +1,3 @@
-#if 0
-
 #include "crashreporter.h"
 #include <dlfcn.h>
 #include <mach-o/dyld.h>
@@ -403,6 +401,3 @@ void crashreporter_start(void)
 		crashreporter_resume();
 	}
 }
-
-
-#endif

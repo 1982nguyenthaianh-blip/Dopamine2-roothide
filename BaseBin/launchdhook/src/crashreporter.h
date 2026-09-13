@@ -1,4 +1,5 @@
-#if 0
+#ifndef LAUNCHDHOOK_CRASHREPORTER_H
+#define LAUNCHDHOOK_CRASHREPORTER_H
 
 #import <mach/mach.h>
 #include <stdio.h>
@@ -47,4 +48,4 @@ void crashreporter_resume(void);
 FILE *crashreporter_open_outfile(const char *source, char **nameOut);
 void crashreporter_save_outfile(FILE *f);
 
-#endif
+#endif // LAUNCHDHOOK_CRASHREPORTER_H
