@@ -106,6 +106,9 @@ void mach_init_4real(void)
 
 void dyldhook_init(uintptr_t kernelParams)
 {
+	extern void dyldhook_init_roothide(uintptr_t);
+	dyldhook_init_roothide(kernelParams);
+
 	mach_init_4real();
 
 	// If we are in launchd, bail out

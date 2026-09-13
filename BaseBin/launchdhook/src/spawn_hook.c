@@ -61,6 +61,10 @@ int __posix_spawn_orig_wrapper(pid_t *restrict pid, const char *restrict path,
 	int r = __posix_spawn_inline(pid, path, desc, argv, envp);
 	crashreporter_resume();
 
+	if(r == 0 && pid) {
+		register_job(*pid);
+	}
+
 	return r;
 }
 
@@ -184,10 +188,14 @@ int __posix_spawn_hook(pid_t *restrict pid, const char *restrict path,
 		}
 	}
 
-	return posix_spawn_hook_shared(pid, path, desc, argv, envp, __posix_spawn_orig_wrapper, systemwide_trust_file_by_path, platform_set_process_debugged, jbsetting(jetsamMultiplier));
+extern int roothide_launchd___posix_spawn_prehook(pid_t *restrict pid, const char *restrict path, struct _posix_spawn_args_desc *desc, char *const argv[restrict], char *const envp[restrict]);
+extern int roothide_launchd___posix_spawn_posthook(pid_t *restrict pid, const char *restrict path, struct _posix_spawn_args_desc *desc, char *const argv[restrict], char *const envp[restrict]);
+extern int roothide_launchd_trust_executable(const char* path);
+
+	return posix_spawn_hook_shared(pid, path, desc, argv, envp, roothide_launchd___posix_spawn_posthook, roothide_launchd_trust_executable, platform_set_process_debugged, jbsetting(jetsamMultiplier));
 }
 
 void initSpawnHooks(void)
 {
-	litehook_hook_function(__posix_spawn, __posix_spawn_hook);
+	litehook_hook_function(__posix_spawn, roothide_launchd___posix_spawn_prehook);
 }
