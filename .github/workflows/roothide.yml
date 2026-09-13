@@ -22,8 +22,15 @@ jobs:
           
       - name: Install Procursus
         uses: dhinakg/procursus-action@main
+        continue-on-error: true
         with:
           packages: ldid findutils sed coreutils make
+
+      - name: Ensure Build Tools
+        run: |
+          which ldid || brew install ldid-procursus || true
+          which gmake || brew install make || true
+          which gsed || brew install gnu-sed || true
 
       - name: Install THEOS
         run: |
@@ -48,7 +55,9 @@ jobs:
           export CFLAGS="$CFLAGS -I$(brew --prefix openssl)/include -arch arm64"
           export LDFLAGS="$LDFLAGS -L$(brew --prefix openssl)/lib -arch arm64"
           gmake -j$(sysctl -n hw.physicalcpu) OPENSSL=1
+          sudo mkdir -p /opt/procursus/bin
           sudo cp trustcache /opt/procursus/bin/
+          sudo cp trustcache /usr/local/bin/ 2>/dev/null || true
 
       - name: Set Environment Variables
         run: |
