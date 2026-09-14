@@ -170,6 +170,11 @@ void redirect_paths(const char* rootdir)
 }
 
 
+int __no_need_to_trust_now__(const char* path)
+{
+	return 0;
+}
+
 int roothide_systemhook___posix_spawn_prehook(pid_t *restrict pidp, const char *restrict path, struct _posix_spawn_args_desc *desc, char *const argv[restrict], char *const envp[restrict], void *orig, int (*trust_binary)(const char *path), int (*set_process_debugged)(uint64_t pid, bool fullyDebugged), double jetsamMultiplier)
 {
 	if(!path) { //Don't crash here due to bad posix_spawn call
