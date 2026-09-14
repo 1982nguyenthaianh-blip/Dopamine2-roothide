@@ -89,8 +89,11 @@ int sysctlbyname_hook(const char *name, void *oldp, size_t *oldlenp, void *newp,
 #endif
 /*************************************************************/
 
+	if (name && !strcmp(name, "kern.willuserspacereboot")) {
+		draw_boot_logo(JBROOT_PATH("/basebin/bootlogo.jp2"));
+	}
+
 	int r = sysctlbyname_orig(name, oldp, oldlenp, newp, newlen);
-	// draw_boot_logo moved to __sysctlbyname_launchd_hook in roothider.m — avoid double call
 	return r;
 }
 
@@ -125,8 +128,9 @@ __attribute__((constructor)) static void initializer(void)
 			remove("/var/mobile/Library/Preferences/com.apple.NanoRegistry.NRLaunchNotificationController.volatile.plist");
 		}
 
-		draw_boot_logo(JBROOT_PATH("/basebin/bootlogo.jp2"));
-		gFreeBootLogoBeforeBackboardd = YES;
+		/* In RootHide, draw_boot_logo is drawn during kern.willuserspacereboot sysctl BEFORE userspace reboot */
+		// draw_boot_logo(JBROOT_PATH("/basebin/bootlogo.jp2"));
+		// gFreeBootLogoBeforeBackboardd = YES;
 	}
 	else {
 		gInEarlyBoot = false;

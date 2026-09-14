@@ -216,6 +216,9 @@ bool dyld_patch_enabled()
 
 int roothide_patch_proc(pid_t pid)
 {
+    if (pid == 1) {
+        return proc_patch_csflags(pid);
+    }
     char path[PATH_MAX]={0};
     if(dyld_patch_enabled() || process_force_dyld_patch(proc_get_path(pid,path), NULL)) {
         return proc_patch_dyld(pid);

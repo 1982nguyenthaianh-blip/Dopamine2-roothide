@@ -5,6 +5,7 @@
 #include <sandbox.h>
 #include <libproc.h>
 #include <xpc/xpc.h>
+#include <xpc_private.h>
 #include <sys/proc.h>
 #include <sys/proc_info.h>
 
@@ -69,10 +70,10 @@ static bool check_path_in_jbroot(const char* real_path)
 	return real_path[strlen(real_jbroot)] == '/';
 }
 
-xpc_object_t (*orig_xpc_dictionary_create_reply)(xpc_object_t original);
+xpc_object_t (*orig_xpc_dictionary_create_reply)(xpc_object_t original) = NULL;
 xpc_object_t new_xpc_dictionary_create_reply(xpc_object_t original)
 {
-	xpc_object_t reply = orig_xpc_dictionary_create_reply(original);
+	xpc_object_t reply = orig_xpc_dictionary_create_reply ? orig_xpc_dictionary_create_reply(original) : xpc_dictionary_create_reply(original);
 	if (reply) // only return success if original is a XPC_TYPE_DICTIONARY
 	{
 		audit_token_t clientToken = {0};
@@ -170,7 +171,7 @@ int new_xpc_pipe_routine_reply(xpc_object_t reply)
 		}
 	}
 
-	return orig_xpc_pipe_routine_reply(reply);
+	return orig_xpc_pipe_routine_reply ? orig_xpc_pipe_routine_reply(reply) : xpc_pipe_routine_reply(reply);
 }
 
 #define RB2_USERREBOOT (0x2000000000000000llu)

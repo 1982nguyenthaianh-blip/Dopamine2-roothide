@@ -53,7 +53,7 @@ int sysctlbyname_hook(const char *name, void *oldp, size_t *oldlenp, void *newp,
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
-int (*orig_bind)(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
+int (*orig_bind)(int sockfd, const struct sockaddr *addr, socklen_t addrlen) = NULL;
 int new_bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 {
     if (addr->sa_family == AF_INET && addrlen >= sizeof(struct sockaddr_in)) {
@@ -64,7 +64,7 @@ int new_bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 			for(port=IPPORT_HIFIRSTAUTO; port<=IPPORT_HILASTAUTO; port++)
 			{
 				addr_in.sin_port = htons(port);
-				ret = orig_bind(sockfd, (struct sockaddr*)&addr_in, addrlen);
+				ret = orig_bind ? orig_bind(sockfd, (struct sockaddr*)&addr_in, addrlen) : bind(sockfd, (struct sockaddr*)&addr_in, addrlen);
 				if(ret==0 || errno!=EADDRINUSE) {
 					break;
 				}
@@ -79,7 +79,7 @@ int new_bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 			for(port=IPPORT_HIFIRSTAUTO; port<=IPPORT_HILASTAUTO; port++)
 			{
 				addr_in6.sin6_port = htons(port);
-				ret = orig_bind(sockfd, (struct sockaddr*)&addr_in6, addrlen);
+				ret = orig_bind ? orig_bind(sockfd, (struct sockaddr*)&addr_in6, addrlen) : bind(sockfd, (struct sockaddr*)&addr_in6, addrlen);
 				if(ret==0 || errno!=EADDRINUSE) {
 					break;
 				}
@@ -87,7 +87,7 @@ int new_bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 			return ret;
         }
     }
-    return orig_bind(sockfd, addr, addrlen);
+    return orig_bind ? orig_bind(sockfd, addr, addrlen) : bind(sockfd, addr, addrlen);
 }
 
 extern xpc_object_t (*orig_xpc_dictionary_create_reply)(xpc_object_t original);
@@ -152,9 +152,9 @@ void roothide_launchd_postinit(bool firstLoad)
 	if (__builtin_available(iOS 16.0, *))
 	{
 		orig_bind = bind;
-		litehook_hook_function((void *)__sysctl, (void *)__sysctl_hook);
-		litehook_hook_function((void *)__sysctlbyname, (void *)__sysctlbyname_launchd_hook);
-		litehook_hook_function((void *)bind, (void *)new_bind); //fix network issues on iOS16+
+		litehook_rebind_symbol(LITEHOOK_REBIND_GLOBAL, (void *)__sysctl, (void *)__sysctl_hook, NULL);
+		litehook_rebind_symbol(LITEHOOK_REBIND_GLOBAL, (void *)__sysctlbyname, (void *)__sysctlbyname_launchd_hook, NULL);
+		litehook_rebind_symbol(LITEHOOK_REBIND_GLOBAL, (void *)bind, (void *)new_bind, NULL); //fix network issues on iOS16+
 	}
 #ifdef __arm64e__
 	else 
@@ -177,8 +177,8 @@ void roothide_launchd_postinit(bool firstLoad)
 
 	orig_xpc_dictionary_create_reply = (void *)xpc_dictionary_create_reply;
 	orig_xpc_pipe_routine_reply = (void *)xpc_pipe_routine_reply;
-	litehook_hook_function((void *)xpc_dictionary_create_reply, (void *)new_xpc_dictionary_create_reply);
-	litehook_hook_function((void *)xpc_pipe_routine_reply, (void *)new_xpc_pipe_routine_reply);
+	litehook_rebind_symbol(LITEHOOK_REBIND_GLOBAL, (void *)xpc_dictionary_create_reply, (void *)new_xpc_dictionary_create_reply, NULL);
+	litehook_rebind_symbol(LITEHOOK_REBIND_GLOBAL, (void *)xpc_pipe_routine_reply, (void *)new_xpc_pipe_routine_reply, NULL);
 
 	// load jailbreakd after applying hooks
 	assert(initJailbreakd(firstLoad) == 0);
