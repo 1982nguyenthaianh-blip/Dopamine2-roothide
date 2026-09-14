@@ -68,7 +68,7 @@ int main(int argc, char* argv[])
 {
 	int unrestrict_ret = -1;
 	for (int attempt = 0; attempt < 300; attempt++) {
-		unrestrict_ret = unrestrict(1, roothide_patch_proc, true);
+		unrestrict_ret = unrestrict(1, proc_patch_dyld, true);
 		if (unrestrict_ret == 0) break;
 		usleep(10*1000);
 	}
