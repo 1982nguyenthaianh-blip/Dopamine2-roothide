@@ -125,9 +125,8 @@ __attribute__((constructor)) static void initializer(void)
 			remove("/var/mobile/Library/Preferences/com.apple.NanoRegistry.NRLaunchNotificationController.volatile.plist");
 		}
 
-		/* In RootHide, draw_boot_logo is drawn during kern.willuserspacereboot sysctl BEFORE userspace reboot */
-		// draw_boot_logo(JBROOT_PATH("/basebin/bootlogo.jp2"));
-		// gFreeBootLogoBeforeBackboardd = YES;
+		draw_boot_logo(JBROOT_PATH("/basebin/bootlogo.jp2"));
+		gFreeBootLogoBeforeBackboardd = YES;
 	}
 	else {
 		gInEarlyBoot = false;
